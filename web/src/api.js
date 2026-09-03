@@ -25,8 +25,9 @@ api.interceptors.response.use(
     if (status === 401) {
       localStorage.removeItem('token');
       localStorage.removeItem('user');
-      if (!location.hash.includes('/login')) {
-        location.href = '/login';
+      // history 路由模式下判断 pathname，避免在登录页 401 触发刷新死循环
+      if (window.location.pathname !== '/login') {
+        window.location.href = '/login';
       }
     }
     showToast(message);
