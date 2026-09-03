@@ -1,0 +1,16 @@
+/* 全局基础样式 + Vant 主题色（清新绿） */
+:root {
+  --van-primary-color: #00a870;
+  --van-success-color: #00a870;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+  margin: 0;
+  background: #f7f8fa;
+  font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', 'PingFang SC',
+    'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+  -webkit-font-smoothing: antialiased;
+}

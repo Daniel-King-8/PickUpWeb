@@ -1,0 +1,24 @@
+# 取个件呗 Web 版 —— Docker Compose 部署配置
+# 使用：docker compose up -d --build
+services:
+  pickup-web:
+    build: .
+    image: pickup-web:latest
+    container_name: pickup-web
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+      # 数据文件与上传文件所在容器内路径（映射到宿主机 ./data）
+      - DB_PATH=/data/pickup.db
+      - UPLOAD_DIR=/data/uploads
+      # 【必改】管理员初始密码（首次启动创建 admin 账号用）
+      - ADMIN_PASSWORD=请改成强密码
+      # 【必改】JWT 密钥，换成一串随机字符
+      - JWT_SECRET=请改成随机长字符串
+      # 时区：按中国时间切"每日结算"
+      - TZ=Asia/Shanghai
+    volumes:
+      # 数据库 + 上传文件持久化到宿主机 ./data（删除容器不丢数据）
+      - ./data:/data
+    restart: unless-stopped
