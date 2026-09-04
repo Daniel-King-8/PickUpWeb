@@ -73,7 +73,7 @@
 <script setup>
 import { onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { showToast, showImagePreview } from 'vant';
+import { showToast, showImagePreview, showConfirmDialog } from 'vant';
 import api from '../api';
 
 const route = useRoute();
@@ -100,16 +100,30 @@ function copyWechat() {
   showToast('说明已复制');
 }
 
-/** 按下"我已付款，完成"：未传截图则提醒，已传则提示等待管理员并回订单 */
+/** 按下"我已付款，完成"：完成即回接单大厅 */
 async function onDone() {
   if (submitting.value) return;
-  if (!order.value || !order.value.payerScreenshot) {
-    return showToast('请先上传付款截图，方便管理员核对');
+  if (!order.value) return;
+
+  if (!order.value.payerScreenshot) {
+    // 未传截图：明确提示，确认后仍可回大厅（截图可在订单详情补传）
+    try {
+      await showConfirmDialog({
+        title: '付款已完成？',
+        message: '还没有上传付款截图，建议先上传方便管理员核对（后续可在订单处补传）。确定现在返回接单大厅？',
+        confirmText: '返回大厅',
+      });
+    } catch (e) {
+      return; // 取消则留在当前页
+    }
+    router.replace('/');
+    return;
   }
+
   submitting.value = true;
   try {
     showToast('已提交，管理员确认后订单发布到大厅');
-    setTimeout(() => router.push(`/orders/${order.value.id}`), 600);
+    setTimeout(() => router.replace('/'), 600);
   } finally {
     submitting.value = false;
   }
