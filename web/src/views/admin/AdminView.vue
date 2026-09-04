@@ -67,10 +67,10 @@
         <van-empty v-if="preview.groups.length === 0" description="该日暂无已完成订单" />
         <div v-for="g in preview.groups" :key="g.runnerId" class="card">
           <div class="card-top">
-            <b>跑腿员 #{{ g.runnerId }}（{{ g.count }} 单）</b>
+            <b>{{ g.runnerName }}（ID {{ g.runnerUid }}）· {{ g.count }} 单</b>
             <span class="sum">实付 ￥{{ g.netPay.toFixed(2) }}</span>
           </div>
-          <div class="card-line muted">跑腿费合计 ￥{{ g.totalReward.toFixed(2) }} - 抽成 ￥{{ g.totalFee.toFixed(2) }}</div>
+          <div class="card-line muted">跑腿费 ￥{{ g.totalReward.toFixed(2) }} - 抽成 ￥{{ g.totalFee.toFixed(2) }} · 联系 {{ g.runnerPhone || '未留电话' }}</div>
         </div>
       </div>
 
@@ -79,8 +79,8 @@
         <van-cell
           v-for="s in settlements"
           :key="s.id"
-          :title="`${s.settleDate} 跑腿员#${s.runnerId}`"
-          :label="`${s.totalReward.toFixed(2)} - ${s.totalFee.toFixed(2)} = 实付 ${s.netPay.toFixed(2)}`"
+          :title="`${s.settleDate} ${s.runnerName}（ID ${s.runnerUid}）`"
+          :label="`跑腿费 ${s.totalReward.toFixed(2)} - 抽成 ${s.totalFee.toFixed(2)} = 实付 ${s.netPay.toFixed(2)} · ${s.runnerPhone || '未留电话'}`"
           :value="s.status === 'pending' ? '待转账' : '已付'"
         >
           <template #right-icon>
@@ -157,15 +157,45 @@
 
     <!-- 用户 -->
     <div v-if="tab === 'users'" class="section">
-      <van-cell-group inset>
-        <van-cell
-          v-for="u in users"
-          :key="u.id"
-          :title="u.username"
-          :label="u.phone || '未填手机号'"
-          :value="u.role === 'admin' ? '管理员' : '用户'"
-        />
-      </van-cell-group>
+      <van-empty v-if="users.length === 0" description="暂无用户" />
+      <div v-for="u in users" :key="u.id" class="card">
+        <div class="user-row">
+          <div class="user-main">
+            <div class="user-name-row">
+              <b>{{ u.username }}</b>
+              <span class="muted">ID: {{ u.uid || '未分配' }}</span>
+              <span v-if="u.role === 'admin'" class="tag">管理员</span>
+            </div>
+            <div class="muted">{{ u.phone || '未填手机号' }} · {{ campusName(u.campus) }}</div>
+          </div>
+          <div v-if="u.role !== 'admin'" class="user-actions">
+            <van-button size="mini" plain round @click="openEditUser(u)">编辑</van-button>
+            <van-button size="mini" plain round type="danger" @click="onDeleteUser(u)">删除</van-button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 编辑用户弹层（含重置密码，留空不改） -->
+      <van-popup v-model:show="showEditUser" position="bottom" round>
+        <div class="edit-title">编辑用户</div>
+        <van-cell-group inset>
+          <van-field v-model="editForm.username" label="用户名" />
+          <van-field v-model="editForm.phone" type="tel" label="手机号" maxlength="11" />
+          <van-field v-model="editForm.uid" label="用户ID(10位)" maxlength="10" placeholder="10 位纯数字" />
+          <van-field label="校区">
+            <template #input>
+              <van-radio-group v-model="editForm.campus" direction="horizontal">
+                <van-radio name="scyz">四川邮电</van-radio>
+                <van-radio name="cdny">成都农业</van-radio>
+              </van-radio-group>
+            </template>
+          </van-field>
+          <van-field v-model="editForm.password" type="password" label="重置密码" placeholder="留空则不修改（至少 6 位）" />
+        </van-cell-group>
+        <div class="edit-actions">
+          <van-button type="primary" block round @click="saveEditUser">保存</van-button>
+        </div>
+      </van-popup>
     </div>
   </div>
 </template>
@@ -242,7 +272,7 @@ async function loadSettlements() {
   settlements.value = res.data;
 }
 async function markSettlePaid(s) {
-  await showConfirmDialog({ title: '标记已转账', message: `已线下转账 ￥${s.netPay.toFixed(2)} 给跑腿员#${s.runnerId}？` });
+  await showConfirmDialog({ title: '标记已转账', message: `已线下转账 ￥${s.netPay.toFixed(2)} 给 ${s.runnerName}（${s.runnerPhone || '未留电话'}）？` });
   await api.post(`/admin/settlements/${s.id}/mark-paid`);
   showSuccessToast('已标记');
   loadSettlements();
@@ -356,11 +386,59 @@ async function saveContact() {
   showSuccessToast('已保存');
 }
 
-/* ---------- 用户 ---------- */
+/* ---------- 用户管理 ---------- */
 const users = ref([]);
+const showEditUser = ref(false);
+const editForm = reactive({ id: null, username: '', phone: '', uid: '', campus: 'scyz', password: '' });
+
+function campusName(c) {
+  return c === 'scyz' ? '四川邮电' : c === 'cdny' ? '成都农业' : '未选校区';
+}
+
 async function loadUsers() {
   const res = await api.get('/admin/users');
   users.value = res.data;
+}
+
+/** 打开编辑弹层 */
+function openEditUser(u) {
+  Object.assign(editForm, {
+    id: u.id,
+    username: u.username,
+    phone: u.phone || '',
+    uid: u.uid || '',
+    campus: u.campus || 'scyz',
+    password: '',
+  });
+  showEditUser.value = true;
+}
+
+/** 保存编辑（密码留空则不修改） */
+async function saveEditUser() {
+  await api.put(`/admin/users/${editForm.id}`, {
+    username: editForm.username,
+    phone: editForm.phone,
+    uid: editForm.uid,
+    campus: editForm.campus,
+  });
+  if (editForm.password) {
+    if (editForm.password.length < 6) return showToast('新密码至少 6 位');
+    await api.put(`/admin/users/${editForm.id}/password`, { password: editForm.password });
+  }
+  showSuccessToast('已保存');
+  showEditUser.value = false;
+  loadUsers();
+}
+
+/** 删除用户 */
+async function onDeleteUser(u) {
+  await showConfirmDialog({
+    title: '删除用户',
+    message: `确认删除「${u.username}」？其历史订单仍保留。`,
+  });
+  await api.delete(`/admin/users/${u.id}`);
+  showSuccessToast('已删除');
+  loadUsers();
 }
 
 function onLogout() {

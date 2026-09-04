@@ -14,6 +14,11 @@ function generateOrderNo() {
   return `KD${ts}${rand}`;
 }
 
+/** 生成 10 位纯数字用户ID（1000000000 ~ 9999999999） */
+function generateUid() {
+  return String(1000000000 + Math.floor(Math.random() * 9000000000));
+}
+
 /**
  * 按中国时区（UTC+8）计算当天日期 YYYY-MM-DD
  * 服务器容器默认 UTC 时区，需手动 +8 以保证"每日结算"按北京时间切天
@@ -62,4 +67,4 @@ function calcFee(rules, station, deliverPlace) {
   return { reward, fee, detail: `基础 ${base} + 楼栋附加 ${extra}` };
 }
 
-module.exports = { maskCode, generateOrderNo, cnToday, parseTowerNo, calcFee };
+module.exports = { maskCode, generateOrderNo, generateUid, cnToday, parseTowerNo, calcFee };

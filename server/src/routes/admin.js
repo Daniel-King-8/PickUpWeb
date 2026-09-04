@@ -6,9 +6,39 @@
  * - 用户列表
  */
 const express = require('express');
+const bcrypt = require('bcryptjs');
 const { Order, Setting, Settlement, User } = require('../models');
 const { uploadImage } = require('../middleware/upload');
-const { cnToday } = require('../utils/helpers');
+const { cnToday, generateUid } = require('../utils/helpers');
+
+/** 批量取用户信息并生成 { id -> {username, uid, phone} } map（结算展示用） */
+async function userMapByIds(ids) {
+  const uniq = [...new Set(ids.filter(Boolean))];
+  if (uniq.length === 0) return {};
+  const users = await User.findAll({ where: { id: uniq } });
+  const map = {};
+  users.forEach((u) => {
+    map[u.id] = { username: u.username, uid: u.uid, phone: u.phone };
+  });
+  return map;
+}
+
+/** 10 位纯数字校验 */
+function isUidLike(uid) {
+  return /^\d{10}$/.test(String(uid));
+}
+
+/** 后台用户返回（不含密码） */
+function publicAdminUser(u) {
+  return {
+    id: u.id,
+    uid: u.uid,
+    username: u.username,
+    phone: u.phone,
+    role: u.role,
+    campus: u.campus,
+  };
+}
 
 module.exports = (ctx) => {
   const router = express.Router();
@@ -115,6 +145,14 @@ module.exports = (ctx) => {
       totalFee: Number(g.totalFee.toFixed(2)),
       netPay: Number((g.totalReward - g.totalFee).toFixed(2)),
     }));
+    // 附上跑腿员信息（姓名/用户ID/电话），管理员转账时知道给谁
+    const umap = await userMapByIds(groups.map((g) => g.runnerId));
+    groups.forEach((g) => {
+      const u = umap[g.runnerId];
+      g.runnerName = u ? u.username : '用户已注销';
+      g.runnerUid = u ? u.uid : String(g.runnerId);
+      g.runnerPhone = u ? u.phone : '';
+    });
     return res.json({ code: 0, data: { date, groups, totalCount: orders.length } });
   });
 
@@ -163,10 +201,22 @@ module.exports = (ctx) => {
     return res.json({ code: 0, data: { created, count: created.length } });
   });
 
-  /** 结算单列表（按日期倒序） */
+  /** 结算单列表（按日期倒序，附跑腿员信息） */
   router.get('/settlements', async (req, res) => {
     const list = await Settlement.findAll({ order: [['id', 'DESC']], limit: 100 });
-    return res.json({ code: 0, data: list });
+    const umap = await userMapByIds(list.map((s) => s.runnerId));
+    return res.json({
+      code: 0,
+      data: list.map((s) => {
+        const u = umap[s.runnerId];
+        return {
+          ...s.toJSON(),
+          runnerName: u ? u.username : '用户已注销',
+          runnerUid: u ? u.uid : String(s.runnerId),
+          runnerPhone: u ? u.phone : '',
+        };
+      }),
+    });
   });
 
   /** 标记结算单已付（管理员线下转账后操作） */
@@ -177,14 +227,68 @@ module.exports = (ctx) => {
     return res.json({ code: 0, data: { success: true } });
   });
 
-  /* ---------- 用户 ---------- */
+  /* ---------- 用户管理 ---------- */
 
   router.get('/users', async (req, res) => {
     const list = await User.findAll({
-      attributes: ['id', 'username', 'phone', 'role', 'createdAt'],
+      attributes: ['id', 'uid', 'username', 'phone', 'role', 'campus', 'createdAt'],
       order: [['id', 'DESC']],
     });
     return res.json({ code: 0, data: list });
+  });
+
+  /** 编辑用户（用户名/手机号/校区/用户ID） */
+  router.put('/users/:id', async (req, res) => {
+    const user = await User.findByPk(req.params.id);
+    if (!user) return res.status(404).json({ code: 404, message: '用户不存在' });
+
+    const { username, phone, campus, uid } = req.body || {};
+    // 用户名唯一
+    if (username !== undefined && String(username) !== user.username) {
+      const exist = await User.findOne({ where: { username } });
+      if (exist) return res.status(400).json({ code: 400, message: '用户名已被占用' });
+      user.username = String(username).slice(0, 50);
+    }
+    // 用户ID：10 位纯数字且唯一
+    if (uid !== undefined && String(uid) !== user.uid) {
+      if (!isUidLike(uid)) {
+        return res.status(400).json({ code: 400, message: '用户ID必须是 10 位纯数字' });
+      }
+      const exist = await User.findOne({ where: { uid } });
+      if (exist) return res.status(400).json({ code: 400, message: '该用户ID已被占用' });
+      user.uid = String(uid);
+    }
+    if (phone !== undefined) user.phone = String(phone).slice(0, 20);
+    if (campus !== undefined) user.campus = ['scyz', 'cdny'].includes(campus) ? campus : user.campus;
+    await user.save();
+    return res.json({ code: 0, data: publicAdminUser(user) });
+  });
+
+  /** 重置密码（管理员设置新密码） */
+  router.put('/users/:id/password', async (req, res) => {
+    const { password } = req.body || {};
+    if (!password || String(password).length < 6) {
+      return res.status(400).json({ code: 400, message: '密码至少 6 位' });
+    }
+    const user = await User.findByPk(req.params.id);
+    if (!user) return res.status(404).json({ code: 404, message: '用户不存在' });
+    user.password = bcrypt.hashSync(String(password), 10);
+    await user.save();
+    return res.json({ code: 0, data: { success: true } });
+  });
+
+  /** 删除用户（不能删自己/其他管理员） */
+  router.delete('/users/:id', async (req, res) => {
+    const target = await User.findByPk(req.params.id);
+    if (!target) return res.status(404).json({ code: 404, message: '用户不存在' });
+    if (target.id === req.user.id) {
+      return res.status(400).json({ code: 400, message: '不能删除自己' });
+    }
+    if (target.role === 'admin') {
+      return res.status(400).json({ code: 400, message: '不能删除管理员账号' });
+    }
+    await target.destroy();
+    return res.json({ code: 0, data: { success: true } });
   });
 
   return router;

@@ -14,6 +14,7 @@ const User = db.define(
   'users',
   {
     id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
+    uid: { type: DataTypes.STRING(10), unique: true, defaultValue: null }, // 10 位纯数字用户ID（注册生成，管理员可改）
     username: { type: DataTypes.STRING(50), unique: true, allowNull: false },
     password: { type: DataTypes.STRING(255), allowNull: false }, // bcrypt 哈希
     phone: { type: DataTypes.STRING(20), defaultValue: '' },

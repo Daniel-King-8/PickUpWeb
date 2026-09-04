@@ -12,6 +12,7 @@ const fs = require('fs');
 const bcrypt = require('bcryptjs');
 const db = require('./db');
 const { User, Setting } = require('./models');
+const { generateUid } = require('./utils/helpers');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -54,11 +55,22 @@ async function bootstrap() {
   if (adminCount === 0) {
     const pwd = process.env.ADMIN_PASSWORD || 'admin123456';
     await User.create({
+      uid: generateUid(),
       username: 'admin',
       password: bcrypt.hashSync(pwd, 10),
       role: 'admin',
     });
     console.log(`[init] 已创建管理员账号 admin（默认密码 ${pwd}，部署时请用 ADMIN_PASSWORD 环境变量覆盖并尽快修改）`);
+  }
+
+  // 1.1 存量用户补齐 uid（升级兼容：早期注册的无 10 位 ID）
+  const noUid = await User.findAll({ where: { uid: null } });
+  for (const u of noUid) {
+    let uid = generateUid();
+    // 冲突重试一次
+    if (await User.count({ where: { uid } }) > 0) uid = generateUid();
+    await u.update({ uid });
+    console.log(`[init] 为用户 ${u.username} 补齐 uid=${uid}`);
   }
 
   // 2. 默认费率设置（幂等）

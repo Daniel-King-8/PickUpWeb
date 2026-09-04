@@ -5,6 +5,7 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const { User, Order } = require('../models');
 const { signToken } = require('../middleware/auth');
+const { generateUid } = require('../utils/helpers');
 
 /** 允许的校区 id（与 config/campus 保持一致） */
 const CAMPUS_ALLOWED = ['scyz', 'cdny'];
@@ -15,7 +16,7 @@ module.exports = (ctx) => {
 
   /** 返回用户公开字段（不含密码） */
   function publicUser(u) {
-    return { id: u.id, username: u.username, role: u.role, phone: u.phone, campus: u.campus };
+    return { id: u.id, uid: u.uid, username: u.username, role: u.role, phone: u.phone, campus: u.campus };
   }
 
   /** 注册（默认普通用户；管理员由后台种子账号创建） */
@@ -32,6 +33,7 @@ module.exports = (ctx) => {
       return res.status(400).json({ code: 400, message: '用户名已被注册' });
     }
     const user = await User.create({
+      uid: generateUid(), // 10 位纯数字用户ID（注册自动生成，保证唯一）
       username,
       password: bcrypt.hashSync(String(password), 10),
       phone: String(phone).slice(0, 20),
