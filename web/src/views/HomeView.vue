@@ -222,6 +222,8 @@ function onPickDestination(action) {
 }
 
 async function onSubmit() {
+  // 防重复提交：请求进行中直接忽略（双击/连点只发一单）
+  if (submitting.value) return;
   if (!form.station || !form.pickupCode || !form.destination || !form.contactPhone) {
     showToast('请填写完整取件信息');
     return;
@@ -244,7 +246,9 @@ async function onSubmit() {
     localStorage.setItem('lastPhone', form.contactPhone);
     showToast('下单成功，请付款');
     router.replace(`/pay/${res.data.orderId}`);
-  } finally {
+    // 成功后保持 submitting=true（跳转后页面已离开），避免跳转前空窗期二次提交
+  } catch (err) {
+    // 失败才恢复按钮，允许重试
     submitting.value = false;
   }
 }
