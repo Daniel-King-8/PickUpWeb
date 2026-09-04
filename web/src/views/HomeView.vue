@@ -63,25 +63,25 @@
       </div>
     </van-form>
 
-    <!-- 驿站选择 -->
-    <van-popup v-model:show="showStation" position="bottom" round>
-      <van-picker
-        :columns="stationColumns"
-        @confirm="onPickStation"
-        @cancel="showStation = false"
-        title="选择取件驿站"
-      />
-    </van-popup>
+    <!-- 驿站选择：点击式列表（适配桌面鼠标，手机同样好用） -->
+    <van-action-sheet
+      v-model:show="showStation"
+      :actions="stationActions"
+      title="选择取件驿站"
+      cancel-text="取消"
+      close-on-click-action
+      @select="onPickStation"
+    />
 
-    <!-- 送达地址选择（楼栋快捷输入） -->
-    <van-popup v-model:show="showTower" position="bottom" round>
-      <van-picker
-        :columns="towerColumns"
-        @confirm="onPickTower"
-        @cancel="showTower = false"
-        title="选择送达楼栋（房间号可稍后修改）"
-      />
-    </van-popup>
+    <!-- 送达地址选择：楼栋点击列表（可滚轮滚动） -->
+    <van-action-sheet
+      v-model:show="showTower"
+      :actions="towerActions"
+      title="选择送达楼栋"
+      cancel-text="取消"
+      close-on-click-action
+      @select="onPickTower"
+    />
   </div>
 </template>
 
@@ -107,20 +107,16 @@ const form = reactive({
   remark: '',
 });
 
-/** 驿站下拉列 */
-const stationColumns = computed(() => {
+/** 驿站点击列表 */
+const stationActions = computed(() => {
   if (!rules.value) return [];
-  return Object.keys(rules.value.stations).map((s) => ({ text: s, value: s }));
+  return Object.keys(rules.value.stations).map((s) => ({ name: s, value: s }));
 });
 
-/** 楼栋快捷列（1-30 楼） */
-const towerColumns = computed(() => {
+/** 楼栋点击列表（1-N 号楼） */
+const towerActions = computed(() => {
   const max = rules.value ? Math.max(...rules.value.towerRules.map((t) => t.to)) : 30;
-  const list = [];
-  for (let i = 1; i <= max; i += 1) {
-    list.push({ text: `${i}号楼`, value: i });
-  }
-  return list;
+  return Array.from({ length: max }, (_, i) => ({ name: `${i + 1}号楼`, value: i + 1 }));
 });
 
 onMounted(async () => {
@@ -152,18 +148,18 @@ async function refreshFee() {
   feeDetail.value = res.data;
 }
 
-function onPickStation({ selectedValues }) {
-  form.station = selectedValues[0];
+/** 选择驿站（ActionSheet 点击项） */
+function onPickStation(action) {
+  form.station = action.name;
   showStation.value = false;
   refreshFee();
 }
 
-function onPickTower({ selectedValues }) {
-  const no = selectedValues[0];
-  // 保留用户已填的房间号：'3号楼' + 已有房间号
-  const match = form.deliverPlace.match(/\d+号楼\s*(\d+)?/);
-  const room = match && match[1] ? match[1] : '';
-  form.deliverPlace = room ? `${no}号楼 ${room}` : `${no}号楼`;
+/** 选择楼栋（保留已填房间号） */
+function onPickTower(action) {
+  const match = form.deliverPlace.match(/(\d+号楼)\s*(\d+)?/);
+  const room = match && match[2] ? match[2] : '';
+  form.deliverPlace = room ? `${action.name} ${room}` : action.name;
   showTower.value = false;
   refreshFee();
 }
