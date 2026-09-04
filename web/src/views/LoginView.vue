@@ -23,6 +23,14 @@
         />
         <van-field
           v-if="mode === 'register'"
+          v-model="form.confirmPassword"
+          type="password"
+          label="确认密码"
+          placeholder="再次输入密码"
+          maxlength="50"
+        />
+        <van-field
+          v-if="mode === 'register'"
           v-model="form.phone"
           label="手机号"
           placeholder="选填，用于联系"
@@ -65,10 +73,13 @@ import { setAuth } from '../store';
 const router = useRouter();
 const mode = ref('login');
 const loading = ref(false);
-const form = reactive({ username: '', password: '', phone: '' });
+const form = reactive({ username: '', password: '', confirmPassword: '', phone: '' });
 
 function switchMode(m) {
   mode.value = m;
+  // 切换模式时清空密码相关输入，避免残留导致误判
+  form.password = '';
+  form.confirmPassword = '';
 }
 
 async function onSubmit() {
@@ -78,6 +89,10 @@ async function onSubmit() {
   }
   if (mode.value === 'register' && form.password.length < 6) {
     showToast('密码至少 6 位');
+    return;
+  }
+  if (mode.value === 'register' && form.password !== form.confirmPassword) {
+    showToast('两次输入的密码不一致');
     return;
   }
   loading.value = true;
