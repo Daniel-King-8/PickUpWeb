@@ -121,19 +121,42 @@
 </template>
 
 <script setup>
-import { computed, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { showToast, showConfirmDialog, showImagePreview } from 'vant';
 import api from '../api';
-import { getUser } from '../store';
+import { getUser, setAuth } from '../store';
 import { copyText } from '../utils/copy';
 
 const route = useRoute();
 const router = useRouter();
 const order = ref(null);
-const user = getUser();
-const isPublisher = computed(() => order.value && order.value.publisherId === user.id);
-const isRunner = computed(() => order.value && order.value.runnerId === user.id);
+const user = ref(getUser()); // 登录信息随每次进入刷新（管理员同意猎头后本地旧值会失效）
+const isPublisher = computed(() => order.value && order.value.publisherId === user.value.id);
+const isRunner = computed(() => order.value && order.value.runnerId === user.value.id);
+
+async function load() {
+  try {
+    const res = await api.get(`/orders/${route.params.id}`);
+    order.value = res.data;
+  } catch (e) {
+    /* 拦截器已处理 */
+  }
+}
+
+async function loadMe() {
+  try {
+    const me = await api.get('/users/me');
+    setAuth(localStorage.getItem('token'), me.data);
+    user.value = me.data;
+  } catch (e) {
+    /* 忽略 */
+  }
+}
+
+onMounted(() => {
+  loadMe().then(load);
+});
 
 const STATUS_TEXT = {
   PAYING: '待支付',
@@ -148,11 +171,6 @@ const statusText = (s) => STATUS_TEXT[s] || s;
 
 function fmt(t) {
   return t ? t.replace('T', ' ').slice(0, 16) : '';
-}
-
-async function load() {
-  const res = await api.get(`/orders/${route.params.id}`);
-  order.value = res.data;
 }
 
 function goBack() {
@@ -225,7 +243,7 @@ async function onAccept() {
   load();
 }
 
-load();
+// 加载入口：onMounted 中先刷新用户信息再加载订单（见上方 loadMe/load）
 </script>
 
 <style scoped>

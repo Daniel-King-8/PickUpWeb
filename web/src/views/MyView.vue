@@ -60,7 +60,7 @@
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue';
 import { useRouter } from 'vue-router';
-import { showToast } from 'vant';
+import { showToast, showConfirmDialog } from 'vant';
 import api from '../api';
 import { getUser, clearAuth } from '../store';
 import { copyText } from '../utils/copy';
@@ -100,6 +100,16 @@ const hunterStatus = computed(() => {
 async function onApplyHunter() {
   if (hunterStatus.value === 'pending') return showToast('已申请，请等待管理员审核');
   if (hunterStatus.value === 'approved') return;
+  // 确认弹窗：是否成为赏金猎人
+  try {
+    await showConfirmDialog({
+      title: '成为赏金猎人？',
+      message: '申请后经管理员同意，即可在接单大厅抢单。',
+      confirmText: '确认',
+    });
+  } catch (e) {
+    return; // 取消
+  }
   try {
     const res = await api.post('/users/hunter-apply');
     // 刷新本地登录态与页面状态
