@@ -84,8 +84,8 @@ async function onSubmit() {
   try {
     const url = mode.value === 'login' ? '/users/login' : '/users/register';
     const res = await api.post(url, form);
-    // 响应结构：{ code, data: { token, user } }，需取 res.data.data
-    const payload = res.data.data;
+    // 拦截器已解包：res.data 直接为 { token, user }
+    const payload = res.data;
     setAuth(payload.token, payload.user);
     showToast(mode.value === 'login' ? '登录成功' : '注册成功');
     // 管理员进入后台，普通用户进入下单首页（从 payload 取用户信息）
