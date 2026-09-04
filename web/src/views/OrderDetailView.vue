@@ -13,7 +13,11 @@
         <template v-if="order.pickupCode === '******'" #label>接单后才可查看</template>
       </van-cell>
       <van-cell title="送达地址" :value="order.deliverPlace" />
-      <van-cell v-if="order.contactPhone" title="联系电话" :value="order.contactPhone" />
+      <van-cell v-if="order.contactPhone" title="联系电话">
+        <template #value>
+          <span class="copyable" @click.stop="copyText(order.contactPhone, '电话号码')">{{ order.contactPhone }}</span>
+        </template>
+      </van-cell>
       <van-cell v-if="order.remark" title="备注" :value="order.remark" />
     </van-cell-group>
 
