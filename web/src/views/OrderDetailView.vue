@@ -228,8 +228,8 @@ async function onDeliver() {
 }
 
 async function onAccept() {
-  // 接单资格校验：非赏金猎人跳转申请入口
-  if (!user.isHunter) {
+  // 接单资格校验：非赏金猎人跳转申请入口（user 为 ref，需 .value）
+  if (!user.value.isHunter) {
     showToast('请先在「我的」页申请成为赏金猎人');
     router.push('/me');
     return;
