@@ -45,11 +45,17 @@
         <div class="search-reset" @click="onResetSearch">重置搜索</div>
       </van-cell-group>
 
-      <!-- 状态筛选（z-index 提升避免被遮挡） -->
-      <div class="filter-wrap">
-        <van-dropdown-menu>
-          <van-dropdown-item v-model="statusFilter" :options="statusOptions" @change="loadOrders" />
-        </van-dropdown-menu>
+      <!-- 状态筛选：横滚标签（点击即筛，无下拉层级问题） -->
+      <div class="chip-row">
+        <span
+          v-for="opt in statusOptions"
+          :key="opt.value"
+          class="chip"
+          :class="{ 'chip--active': statusFilter === opt.value }"
+          @click="onFilter(opt)"
+        >
+          {{ opt.text }}
+        </span>
       </div>
 
       <div v-for="o in allOrders" :key="o.id" class="card">
@@ -302,6 +308,12 @@ function onResetSearch() {
   searchOrderNo.value = '';
   searchUid.value = '';
   statusFilter.value = '';
+  loadOrders();
+}
+
+/** 点击状态标签筛选 */
+function onFilter(opt) {
+  statusFilter.value = opt.value;
   loadOrders();
 }
 
@@ -614,10 +626,29 @@ onMounted(() => {
   color: #00a870;
   text-align: right;
 }
-/* 状态筛选容器 z-index 提升，避免下拉被其它元素遮挡 */
-.filter-wrap {
-  position: relative;
-  z-index: 3000;
+/* 状态筛选横滚标签 */
+.chip-row {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  padding: 6px 2px 12px;
+  white-space: nowrap;
+  -webkit-overflow-scrolling: touch;
+}
+.chip {
+  flex: 0 0 auto;
+  padding: 8px 18px;
+  border-radius: 20px;
+  font-size: 13px;
+  color: #666;
+  background: #fff;
+  border: 1px solid #eeeeee;
+}
+.chip--active {
+  color: #00a870;
+  border-color: #00a870;
+  background: #e6f7f0;
+  font-weight: 500;
 }
 .tag--PAYING,
 .tag--PAID {
