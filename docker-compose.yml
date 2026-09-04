@@ -15,8 +15,8 @@ services:
       - USE_MYSQL=1
       - DB_HOST=127.0.0.1
       - DB_PORT=3306
-      - DB_NAME=KD
-      - DB_USER=KD
+      - DB_NAME=kd
+      - DB_USER=kd
       - DB_PASSWORD=kdkdkd
       # 图片上传目录（挂宿主机卷持久化）
       - UPLOAD_DIR=/data/uploads
