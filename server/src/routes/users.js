@@ -16,7 +16,16 @@ module.exports = (ctx) => {
 
   /** 返回用户公开字段（不含密码） */
   function publicUser(u) {
-    return { id: u.id, uid: u.uid, username: u.username, role: u.role, phone: u.phone, campus: u.campus };
+    return {
+      id: u.id,
+      uid: u.uid,
+      username: u.username,
+      role: u.role,
+      phone: u.phone,
+      campus: u.campus,
+      isHunter: !!u.isHunter,
+      hunterApplyAt: u.hunterApplyAt || null,
+    };
   }
 
   /** 注册（默认普通用户；管理员由后台种子账号创建） */
@@ -75,6 +84,16 @@ module.exports = (ctx) => {
     const user = await User.findByPk(req.user.id);
     if (!user) return res.status(401).json({ code: 401, message: '用户不存在' });
     await user.update({ campus });
+    return res.json({ code: 0, data: publicUser(user) });
+  });
+
+  /** 申请成为赏金猎人（提交后等待管理员审核） */
+  router.post('/hunter-apply', auth, async (req, res) => {
+    const user = await User.findByPk(req.user.id);
+    if (!user) return res.status(401).json({ code: 401, message: '用户不存在' });
+    if (user.isHunter) return res.status(400).json({ code: 400, message: '你已经是赏金猎人了' });
+    if (user.hunterApplyAt) return res.status(400).json({ code: 400, message: '已提交申请，请等待管理员审核' });
+    await user.update({ hunterApplyAt: new Date() });
     return res.json({ code: 0, data: publicUser(user) });
   });
 

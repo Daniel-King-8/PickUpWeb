@@ -22,6 +22,8 @@ const User = db.define(
     phone: { type: DataTypes.STRING(20), defaultValue: '' },
     role: { type: DataTypes.ENUM('user', 'admin'), defaultValue: 'user' },
     campus: { type: DataTypes.STRING(20), defaultValue: '' }, // 校区 id（scyz/cdny），首次登录选择
+    isHunter: { type: DataTypes.BOOLEAN, defaultValue: false }, // 赏金猎人身份（接单资格），管理员授予
+    hunterApplyAt: { type: DataTypes.DATE, defaultValue: null }, // 申请成为赏金猎人的时间（待审核标记）
   },
   { tableName: 'users' }
 );

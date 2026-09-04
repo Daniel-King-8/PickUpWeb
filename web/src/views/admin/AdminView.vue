@@ -194,6 +194,26 @@
 
     <!-- 用户 -->
     <div v-if="tab === 'users'" class="section">
+      <!-- 赏金猎人审批区 -->
+      <div v-if="hunterApps.length" class="card">
+        <div class="card-top">
+          <b>🐰 赏金猎人申请（{{ hunterApps.length }} 条待处理）</b>
+        </div>
+        <div v-for="h in hunterApps" :key="h.id" class="user-row hunter-app">
+          <div class="user-main">
+            <div class="user-name-row">
+              <b>{{ h.username }}</b>
+              <span class="muted">ID {{ h.uid }}</span>
+            </div>
+            <div class="muted">{{ h.phone || '未留电话' }} · {{ campusName(h.campus) }} · {{ fmtTime(h.hunterApplyAt) }} 申请</div>
+          </div>
+          <div class="user-actions">
+            <van-button size="mini" round type="success" @click="approveHunter(h)">同意</van-button>
+            <van-button size="mini" round plain type="danger" @click="rejectHunter(h)">拒绝</van-button>
+          </div>
+        </div>
+      </div>
+
       <van-empty v-if="users.length === 0" description="暂无用户" />
       <div v-for="u in users" :key="u.id" class="card">
         <div class="user-row">
@@ -203,13 +223,14 @@
               <span class="muted">ID:
                 <span class="copyable copyable--inline" @click.stop="copyText(u.uid, '用户ID')">{{ u.uid || '未分配' }}</span>
               </span>
+              <span v-if="u.isHunter" class="tag">🐰 猎人</span>
               <span v-if="u.role === 'admin'" class="tag">管理员</span>
             </div>
             <div class="muted">{{ u.phone || '未填手机号' }} · {{ campusName(u.campus) }}</div>
           </div>
-          <div v-if="u.role !== 'admin'" class="user-actions">
+          <div class="user-actions">
             <van-button size="mini" plain round @click="openEditUser(u)">编辑</van-button>
-            <van-button size="mini" plain round type="danger" @click="onDeleteUser(u)">删除</van-button>
+            <van-button v-if="u.role !== 'admin'" size="mini" plain round type="danger" @click="onDeleteUser(u)">删除</van-button>
           </div>
         </div>
       </div>
@@ -221,6 +242,14 @@
           <van-field v-model="editForm.username" label="用户名" />
           <van-field v-model="editForm.phone" type="tel" label="手机号" maxlength="11" />
           <van-field v-model="editForm.uid" label="用户ID(10位)" maxlength="10" placeholder="10 位纯数字" />
+          <van-field label="赏金猎人">
+            <template #input>
+              <div class="switch-line">
+                <span>{{ editForm.isHunter ? '✅ 已授予' : '未授予' }}</span>
+                <van-switch v-model="editForm.isHunter" size="20" />
+              </div>
+            </template>
+          </van-field>
           <van-field label="校区">
             <template #input>
               <van-radio-group v-model="editForm.campus" direction="horizontal">
@@ -471,8 +500,36 @@ async function saveContact() {
 
 /* ---------- 用户管理 ---------- */
 const users = ref([]);
+const hunterApps = ref([]);
 const showEditUser = ref(false);
-const editForm = reactive({ id: null, username: '', phone: '', uid: '', campus: 'scyz', password: '' });
+const editForm = reactive({ id: null, username: '', phone: '', uid: '', campus: 'scyz', isHunter: false, password: '' });
+
+function fmtTime(t) {
+  return t ? String(t).replace('T', ' ').slice(5, 16) : '';
+}
+
+/** 加载猎头申请列表 */
+async function loadHunterApps() {
+  const res = await api.get('/admin/hunter-applications');
+  hunterApps.value = res.data;
+}
+
+/** 同意猎头申请 */
+async function approveHunter(h) {
+  await showConfirmDialog({ title: '同意申请', message: `授予「${h.username}」赏金猎人身份？` });
+  await api.post(`/admin/hunter/${h.id}/approve`);
+  showSuccessToast('已授予');
+  loadHunterApps();
+  loadUsers();
+}
+
+/** 拒绝猎头申请 */
+async function rejectHunter(h) {
+  await showConfirmDialog({ title: '拒绝申请', message: `拒绝「${h.username}」的申请？（可重新申请）` });
+  await api.post(`/admin/hunter/${h.id}/reject`);
+  showSuccessToast('已拒绝');
+  loadHunterApps();
+}
 
 function campusName(c) {
   return c === 'scyz' ? '四川邮电' : c === 'cdny' ? '成都农业' : '未选校区';
@@ -491,6 +548,7 @@ function openEditUser(u) {
     phone: u.phone || '',
     uid: u.uid || '',
     campus: u.campus || 'scyz',
+    isHunter: !!u.isHunter,
     password: '',
   });
   showEditUser.value = true;
@@ -503,6 +561,7 @@ async function saveEditUser() {
     phone: editForm.phone,
     uid: editForm.uid,
     campus: editForm.campus,
+    isHunter: editForm.isHunter,
   });
   if (editForm.password) {
     if (editForm.password.length < 6) return showToast('新密码至少 6 位');
@@ -536,6 +595,7 @@ function loadAll() {
   loadSettlements();
   loadSettings();
   loadUsers();
+  loadHunterApps();
 }
 
 watch(tab, () => {
@@ -547,7 +607,10 @@ watch(tab, () => {
     loadSettlements();
   }
   if (tab.value === 'settings') loadSettings();
-  if (tab.value === 'users') loadUsers();
+  if (tab.value === 'users') {
+    loadUsers();
+    loadHunterApps();
+  }
 });
 
 onMounted(() => {
@@ -686,6 +749,18 @@ onMounted(() => {
   margin: 0 16px 10px;
   font-size: 12px;
   color: #999;
+}
+/* 猎头开关行 */
+.switch-line {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #333;
+  font-size: 14px;
+}
+.hunter-app {
+  padding: 12px 0;
+  border-top: 1px solid #f5f6f7;
 }
 .settle-tools {
   display: flex;

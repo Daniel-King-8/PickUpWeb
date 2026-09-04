@@ -189,6 +189,11 @@ module.exports = (ctx) => {
     if (order.publisherId === req.user.id) {
       return res.status(400).json({ code: 400, message: '不能接自己发布的单' });
     }
+    // 接单资格：必须是审核通过的"赏金猎人"
+    const me = await User.findByPk(req.user.id);
+    if (!me || !me.isHunter) {
+      return res.status(403).json({ code: 4301, message: '只有赏金猎人才能接单，请先申请' });
+    }
     const [affected] = await Order.update(
       { runnerId: req.user.id, status: 'ACCEPTED', acceptedAt: new Date() },
       { where: { id: order.id, status: 'PAID', runnerId: null } }

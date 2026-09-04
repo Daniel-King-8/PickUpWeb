@@ -48,8 +48,8 @@ app.get('*', (req, res, next) => {
  * - 默认费率与抽成规则
  */
 async function bootstrap() {
-  // MySQL：新库直接建表；SQLite 开发模式保留 alter 便于结构演进
-  await db.sync(process.env.USE_MYSQL === '1' ? {} : { alter: true });
+  // 建表（alter 模式：版本演进时自动增列；新增列均无唯一约束，MySQL/SQLite 均安全）
+  await db.sync({ alter: true });
 
   // 1. 管理员账号（幂等）
   const adminCount = await User.count({ where: { role: 'admin' } });

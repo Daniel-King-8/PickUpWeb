@@ -120,7 +120,7 @@
       >
         我已送达（上传照片）
       </van-button>
-      <!-- 大厅可见 → 抢单 -->
+      <!-- 大厅可见 → 抢单（仅赏金猎人可接） -->
       <van-button
         v-if="order.status === 'PAID' && !isPublisher && !isRunner"
         type="danger"
@@ -128,7 +128,7 @@
         round
         @click="onAccept"
       >
-        抢单（赚 ￥{{ order.reward.toFixed(2) }}）
+        {{ user.isHunter ? `抢单（赚 ￥${order.reward.toFixed(2)}）` : '成为赏金猎人后接单' }}
       </van-button>
     </div>
   </div>
@@ -213,6 +213,12 @@ async function onCancel() {
 }
 
 async function onAccept() {
+  // 接单资格校验：非赏金猎人跳转申请入口
+  if (!user.isHunter) {
+    showToast('请先在「我的」页申请成为赏金猎人');
+    router.push('/me');
+    return;
+  }
   await showConfirmDialog({
     title: '确认抢单',
     message: '抢单后请尽快取件送达，取件码将对你可见。',

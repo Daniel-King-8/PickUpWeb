@@ -30,6 +30,13 @@
       </div>
     </div>
 
+    <!-- 接单资格：赏金猎人 -->
+    <van-cell-group inset title="接单资格">
+      <van-cell v-if="hunterStatus === 'approved'" title="赏金猎人" value="✅ 已获得接单资格" />
+      <van-cell v-else-if="hunterStatus === 'pending'" title="赏金猎人" value="⏳ 已申请，等待管理员审核" />
+      <van-cell v-else title="赏金猎人" value="尚未申请 · 点击申请" is-link @click="onApplyHunter" />
+    </van-cell-group>
+
     <!-- 功能入口 -->
     <van-cell-group inset title="功能">
       <van-cell title="我发布的订单" is-link @click="$router.push('/orders/mine')">
@@ -51,7 +58,7 @@
 </template>
 
 <script setup>
-import { onMounted, reactive, ref } from 'vue';
+import { computed, onMounted, reactive, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { showToast } from 'vant';
 import api from '../api';
@@ -81,6 +88,30 @@ onMounted(async () => {
     /* 401 拦截器已处理跳转 */
   }
 });
+
+/** 猎头状态：approved / pending / none */
+const hunterStatus = computed(() => {
+  if (user.value.isHunter) return 'approved';
+  if (user.value.hunterApplyAt) return 'pending';
+  return 'none';
+});
+
+/** 申请成为赏金猎人 */
+async function onApplyHunter() {
+  if (hunterStatus.value === 'pending') return showToast('已申请，请等待管理员审核');
+  if (hunterStatus.value === 'approved') return;
+  try {
+    const res = await api.post('/users/hunter-apply');
+    // 刷新本地登录态与页面状态
+    const me = await api.get('/users/me');
+    setAuth(localStorage.getItem('token'), me.data);
+    user.value = me.data;
+    stats.runCompleted = user.value.runCompleted ?? stats.runCompleted;
+    showToast('申请成功，请等待管理员审核');
+  } catch (e) {
+    /* 拦截器已提示 */
+  }
+}
 
 /** 关于：复制博客链接 */
 function onAbout() {

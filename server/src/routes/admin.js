@@ -37,6 +37,8 @@ function publicAdminUser(u) {
     phone: u.phone,
     role: u.role,
     campus: u.campus,
+    isHunter: !!u.isHunter,
+    hunterApplyAt: u.hunterApplyAt || null,
   };
 }
 
@@ -256,10 +258,37 @@ module.exports = (ctx) => {
 
   router.get('/users', async (req, res) => {
     const list = await User.findAll({
-      attributes: ['id', 'uid', 'username', 'phone', 'role', 'campus', 'createdAt'],
+      attributes: ['id', 'uid', 'username', 'phone', 'role', 'campus', 'isHunter', 'hunterApplyAt', 'createdAt'],
       order: [['id', 'DESC']],
     });
     return res.json({ code: 0, data: list });
+  });
+
+  /** 赏金猎人申请列表（待审核） */
+  router.get('/hunter-applications', async (req, res) => {
+    const { Op } = require('sequelize');
+    const list = await User.findAll({
+      where: { hunterApplyAt: { [Op.ne]: null } },
+      attributes: ['id', 'uid', 'username', 'phone', 'campus', 'hunterApplyAt'],
+      order: [['hunterApplyAt', 'DESC']],
+    });
+    return res.json({ code: 0, data: list });
+  });
+
+  /** 同意申请：授予赏金猎人身份 */
+  router.post('/hunter/:id/approve', async (req, res) => {
+    const u = await User.findByPk(req.params.id);
+    if (!u) return res.status(404).json({ code: 404, message: '用户不存在' });
+    await u.update({ isHunter: true, hunterApplyAt: null });
+    return res.json({ code: 0, data: { success: true } });
+  });
+
+  /** 拒绝申请：清除申请记录（用户可重新申请） */
+  router.post('/hunter/:id/reject', async (req, res) => {
+    const u = await User.findByPk(req.params.id);
+    if (!u) return res.status(404).json({ code: 404, message: '用户不存在' });
+    await u.update({ hunterApplyAt: null });
+    return res.json({ code: 0, data: { success: true } });
   });
 
   /** 编辑用户（用户名/手机号/校区/用户ID） */
@@ -267,7 +296,7 @@ module.exports = (ctx) => {
     const user = await User.findByPk(req.params.id);
     if (!user) return res.status(404).json({ code: 404, message: '用户不存在' });
 
-    const { username, phone, campus, uid } = req.body || {};
+    const { username, phone, campus, uid, isHunter } = req.body || {};
     // 用户名唯一
     if (username !== undefined && String(username) !== user.username) {
       const exist = await User.findOne({ where: { username } });
@@ -285,6 +314,7 @@ module.exports = (ctx) => {
     }
     if (phone !== undefined) user.phone = String(phone).slice(0, 20);
     if (campus !== undefined) user.campus = ['scyz', 'cdny'].includes(campus) ? campus : user.campus;
+    if (isHunter !== undefined) user.isHunter = !!isHunter;
     await user.save();
     return res.json({ code: 0, data: publicAdminUser(user) });
   });
