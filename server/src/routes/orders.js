@@ -204,16 +204,17 @@ module.exports = (ctx) => {
     return res.json({ code: 0, data: { success: true } });
   });
 
-  /** 送达：跑腿员上传照片并标记已完成（ACCEPTED → DELIVERED） */
+  /** 送达：跑腿员标记已完成（ACCEPTED → DELIVERED；照片可选，不再强制） */
   router.post('/:id/deliver', auth, uploadImage, async (req, res) => {
-    if (!req.file) return res.status(400).json({ code: 400, message: '请选择送达照片' });
     const order = await Order.findByPk(req.params.id);
     if (!order) return res.status(404).json({ code: 404, message: '订单不存在' });
     if (order.runnerId !== req.user.id) {
       return res.status(403).json({ code: 403, message: '只有跑腿员可标记送达' });
     }
+    // 有照片则保存，无照片正常送达
+    const photo = req.file ? `/uploads/${req.file.filename}` : '';
     const [affected] = await Order.update(
-      { deliveryPhoto: `/uploads/${req.file.filename}`, status: 'DELIVERED', deliveredAt: new Date() },
+      { deliveryPhoto: photo, status: 'DELIVERED', deliveredAt: new Date() },
       { where: { id: order.id, status: 'ACCEPTED', runnerId: req.user.id } }
     );
     if (affected !== 1) {

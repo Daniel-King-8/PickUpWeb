@@ -6,6 +6,8 @@
  * - 用户列表
  */
 const express = require('express');
+const fs = require('fs');
+const path = require('path');
 const bcrypt = require('bcryptjs');
 const { Order, Setting, Settlement, User } = require('../models');
 const { uploadImage } = require('../middleware/upload');
@@ -101,6 +103,25 @@ module.exports = (ctx) => {
       return res.status(400).json({ code: 400, message: '该订单不可取消' });
     }
     await order.update({ status: 'CANCELED' });
+    return res.json({ code: 0, data: { success: true } });
+  });
+
+  /** 删除订单（物理删除记录，并尽力清理其上传文件） */
+  router.delete('/orders/:id', async (req, res) => {
+    const order = await Order.findByPk(req.params.id);
+    if (!order) return res.status(404).json({ code: 404, message: '订单不存在' });
+    // 清理该订单上传的截图/照片（尽力而为，文件不存在时忽略）
+    const uploadDir = process.env.UPLOAD_DIR || '/data/uploads';
+    [order.payerScreenshot, order.deliveryPhoto].forEach((filePath) => {
+      if (!filePath) return;
+      try {
+        const full = path.join(uploadDir, path.basename(filePath));
+        fs.unlinkSync(full);
+      } catch (e) {
+        /* 文件不存在等，忽略 */
+      }
+    });
+    await order.destroy();
     return res.json({ code: 0, data: { success: true } });
   });
 

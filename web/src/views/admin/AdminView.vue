@@ -68,6 +68,9 @@
           · {{ o.station }} · {{ o.deliverPlace }}
         </div>
         <div class="card-line muted">雇主 {{ o.publisherName }}（ID {{ o.publisherUid }}） · 跑腿 {{ o.runnerName || '-' }}（ID {{ o.runnerUid || '-' }}）</div>
+        <div class="card-actions">
+          <van-button size="small" plain round type="danger" @click="onDeleteAdminOrder(o)">删除订单</van-button>
+        </div>
       </div>
     </div>
 
@@ -343,6 +346,17 @@ function onResetSearch() {
 /** 点击状态标签筛选 */
 function onFilter(opt) {
   statusFilter.value = opt.value;
+  loadOrders();
+}
+
+/** 删除订单（管理员） */
+async function onDeleteAdminOrder(o) {
+  await showConfirmDialog({
+    title: '删除订单',
+    message: `确认删除订单 ${o.orderNo}？删除后不可恢复（结算历史不受影响）。`,
+  });
+  await api.delete(`/admin/orders/${o.id}`);
+  showSuccessToast('已删除');
   loadOrders();
 }
 

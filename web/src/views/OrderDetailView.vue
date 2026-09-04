@@ -37,23 +37,9 @@
       </div>
     </van-cell-group>
 
-    <van-cell-group v-else-if="order.status === 'ACCEPTED' && isRunner" inset title="送达凭证">
-      <div class="upload-row">
-        <div class="upload-preview" @click="uploadPay('deliver')">
-          <van-image
-            v-if="order.deliveryPhoto"
-            :src="order.deliveryPhoto"
-            width="96"
-            height="96"
-            fit="cover"
-          />
-          <div v-else class="upload-placeholder">
-            <span>＋</span>
-            <small>上传送达照片</small>
-          </div>
-        </div>
-        <div class="upload-tip">送达后拍照上传，雇主确认后完成本单</div>
-      </div>
+    <!-- 送达凭证（可选显示已有照片） -->
+    <van-cell-group v-if="order.status === 'ACCEPTED' && isRunner && order.deliveryPhoto" inset title="送达凭证">
+      <van-cell title="送达照片" :value="order.deliveryPhoto" />
     </van-cell-group>
 
     <van-cell-group inset title="订单信息">
@@ -110,15 +96,15 @@
       >
         确认收货
       </van-button>
-      <!-- 跑腿员：送达按钮 -->
+      <!-- 跑腿员：送达按钮（无需上传照片） -->
       <van-button
         v-if="isRunner && order.status === 'ACCEPTED'"
         type="primary"
         block
         round
-        @click="uploadPay('deliver')"
+        @click="onDeliver"
       >
-        我已送达（上传照片）
+        我已送达
       </van-button>
       <!-- 大厅可见 → 抢单（仅赏金猎人可接） -->
       <van-button
@@ -209,6 +195,17 @@ async function onCancel() {
   await showConfirmDialog({ title: '取消订单', message: '确认取消？若已接单需联系管理员处理。' });
   await api.post(`/orders/${order.value.id}/cancel`);
   showToast('订单已取消');
+  load();
+}
+
+/** 跑腿员确认送达（无需照片） */
+async function onDeliver() {
+  await showConfirmDialog({
+    title: '确认送达',
+    message: '确认快递已送到指定地址？',
+  });
+  await api.post(`/orders/${order.value.id}/deliver`);
+  showToast('已标记送达，等待雇主确认');
   load();
 }
 
