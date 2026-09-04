@@ -60,7 +60,10 @@
     </van-cell-group>
 
     <div class="actions">
-      <van-button type="primary" block round @click="$router.push('/orders/mine')">
+      <van-button type="success" block round :loading="submitting" @click="onDone">
+        ✅ 我已付款，完成
+      </van-button>
+      <van-button class="second-btn" block round plain @click="$router.push('/orders/mine')">
         查看我的订单
       </van-button>
     </div>
@@ -69,11 +72,13 @@
 
 <script setup>
 import { onMounted, ref } from 'vue';
-import { useRoute } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import { showToast, showImagePreview } from 'vant';
 import api from '../api';
 
 const route = useRoute();
+const router = useRouter();
+const submitting = ref(false);
 const order = ref(null);
 const payInfo = ref({ payQrWx: '', payQrAlipay: '', contactWechat: '' });
 
@@ -93,6 +98,21 @@ function previewQr(url) {
 function copyWechat() {
   navigator.clipboard.writeText(payInfo.value.contactWechat);
   showToast('说明已复制');
+}
+
+/** 按下"我已付款，完成"：未传截图则提醒，已传则提示等待管理员并回订单 */
+async function onDone() {
+  if (submitting.value) return;
+  if (!order.value || !order.value.payerScreenshot) {
+    return showToast('请先上传付款截图，方便管理员核对');
+  }
+  submitting.value = true;
+  try {
+    showToast('已提交，管理员确认后订单发布到大厅');
+    setTimeout(() => router.push(`/orders/${order.value.id}`), 600);
+  } finally {
+    submitting.value = false;
+  }
 }
 
 async function uploadScreenshot() {
@@ -198,5 +218,8 @@ async function uploadScreenshot() {
 }
 .actions {
   margin: 32px 24px 0;
+}
+.second-btn {
+  margin-top: 12px;
 }
 </style>

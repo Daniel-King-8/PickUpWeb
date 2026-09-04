@@ -41,6 +41,7 @@
           label="悬赏金额(元)"
           :placeholder="`最低 ${minReward.toFixed(2)} 元`"
           maxlength="6"
+          :error-message="rewardError"
         />
 
         <van-field
@@ -73,8 +74,15 @@
       </van-cell-group>
 
       <div class="submit-area">
-        <van-button type="primary" block round :loading="submitting" @click="onSubmit">
-          提交订单（￥{{ feeDetail ? feeDetail.reward.toFixed(2) : '--' }}）
+        <van-button
+          type="primary"
+          block
+          round
+          :loading="submitting"
+          :disabled="!!rewardError"
+          @click="onSubmit"
+        >
+          提交订单（￥{{ submitAmount }}）
         </van-button>
         <div class="my-orders-link" @click="$router.push('/orders/mine')">我的订单 →</div>
       </div>
@@ -151,6 +159,24 @@ const feeDetail = computed(() => {
 
 /** 最低悬赏金额 */
 const minReward = computed(() => (feeDetail.value ? feeDetail.value.reward : 1));
+
+/** 金额即时校验：低于最低值时提示错误 */
+const rewardError = computed(() => {
+  if (!form.reward) return '';
+  const n = Number(form.reward);
+  if (Number.isNaN(n)) return '请输入数字';
+  if (n < minReward.value) return `不能低于 ¥${minReward.value.toFixed(2)}（基础¥1+平台费）`;
+  return '';
+});
+
+/** 提交按钮显示金额：有合法输入显示输入值，否则最低价 */
+const submitAmount = computed(() => {
+  const n = Number(form.reward);
+  if (!form.reward || Number.isNaN(n) || n < minReward.value) {
+    return minReward.value.toFixed(2);
+  }
+  return n.toFixed(2);
+});
 
 const user = getUser();
 const CAMPUS = user && user.campus;
