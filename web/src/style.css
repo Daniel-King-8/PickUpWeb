@@ -14,3 +14,17 @@ body,
     'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
   -webkit-font-smoothing: antialiased;
 }
+
+/* 可点击复制样式（用户ID/订单号等） */
+.copyable {
+  color: #00a870;
+  border-bottom: 1px dashed rgba(0, 168, 112, 0.5);
+  cursor: pointer;
+}
+.copyable--inline {
+  margin: 0 2px;
+}
+.copyable--light {
+  color: #fff;
+  border-bottom-color: rgba(255, 255, 255, 0.5);
+}

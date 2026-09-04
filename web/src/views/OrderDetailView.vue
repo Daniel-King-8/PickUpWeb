@@ -57,7 +57,21 @@
     </van-cell-group>
 
     <van-cell-group inset title="订单信息">
-      <van-cell title="订单号" :value="order.orderNo" />
+      <van-cell title="订单号">
+        <template #value>
+          <span class="copyable" @click.stop="copyText(order.orderNo, '订单号')">{{ order.orderNo }}</span>
+        </template>
+      </van-cell>
+      <van-cell title="发布者" v-if="order.publisherName">
+        <template #value>
+          {{ order.publisherName }}（<span class="copyable" @click.stop="copyText(order.publisherUid, '用户ID')">{{ order.publisherUid }}</span>）
+        </template>
+      </van-cell>
+      <van-cell title="接单者" v-if="order.runnerName">
+        <template #value>
+          {{ order.runnerName }}（<span class="copyable" @click.stop="copyText(order.runnerUid, '用户ID')">{{ order.runnerUid }}</span>）
+        </template>
+      </van-cell>
       <van-cell title="跑腿费" :value="`￥${order.reward.toFixed(2)}`" />
       <van-cell title="平台服务费" :value="`￥${order.fee.toFixed(2)}`" />
       <van-cell v-if="order.acceptedAt" title="接单时间" :value="fmt(order.acceptedAt)" />
@@ -126,6 +140,7 @@ import { useRoute, useRouter } from 'vue-router';
 import { showToast, showConfirmDialog, showImagePreview } from 'vant';
 import api from '../api';
 import { getUser } from '../store';
+import { copyText } from '../utils/copy';
 
 const route = useRoute();
 const router = useRouter();

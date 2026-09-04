@@ -7,7 +7,9 @@
       <div class="avatar">取</div>
       <div class="user-info">
         <div class="name">{{ user.username || '同学' }}</div>
-        <div class="uid">用户ID：{{ user.uid || '--' }}</div>
+        <div class="uid">
+          用户ID：<span class="copyable copyable--light" @click="copyText(user.uid, '用户ID')">{{ user.uid || '--' }}</span>
+        </div>
         <div class="campus">{{ campusName(user.campus) }}</div>
       </div>
     </div>
@@ -54,6 +56,7 @@ import { useRouter } from 'vue-router';
 import { showToast } from 'vant';
 import api from '../api';
 import { getUser, clearAuth } from '../store';
+import { copyText } from '../utils/copy';
 
 const router = useRouter();
 const user = ref(getUser() || {});

@@ -11,7 +11,10 @@
           <b class="reward">￥{{ o.reward.toFixed(2) }}</b>
         </div>
         <div class="line">{{ o.station }} · 送至 {{ o.deliverPlace }}</div>
-        <div class="line line-peer">雇主：{{ o.publisherName }}（ID {{ o.publisherUid }}）</div>
+        <div class="line line-peer">
+          雇主：{{ o.publisherName }}（ID
+          <span class="copyable copyable--inline" @click.stop="copyText(o.publisherUid, '雇主用户ID')">{{ o.publisherUid }}</span>）
+        </div>
         <div class="card-foot">
           <span>{{ o.orderNo }}</span>
           <span class="hint">详情 →</span>
@@ -24,6 +27,7 @@
 <script setup>
 import { ref } from 'vue';
 import api from '../api';
+import { copyText } from '../utils/copy';
 
 const list = ref([]);
 const loading = ref(false);

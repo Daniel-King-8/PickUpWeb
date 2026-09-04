@@ -16,8 +16,11 @@
           <b class="reward">￥{{ o.reward.toFixed(2) }}</b>
         </div>
         <div class="card-line">{{ o.station }} · 送至 {{ o.deliverPlace }}</div>
+        <div class="line line-peer" v-if="o.runnerName">跑腿员：{{ o.runnerName }}（ID
+          <span class="copyable copyable--inline" @click.stop="copyText(o.runnerUid, '跑腿员用户ID')">{{ o.runnerUid }}</span>）
+        </div>
         <div class="card-foot">
-          <span class="no">{{ o.orderNo }}</span>
+          <span class="no copyable copyable--inline" @click.stop="copyText(o.orderNo, '订单号')">{{ o.orderNo }}</span>
           <span class="arrow">详情 →</span>
         </div>
       </div>
@@ -28,6 +31,7 @@
 <script setup>
 import { ref } from 'vue';
 import api from '../api';
+import { copyText } from '../utils/copy';
 
 const activeTab = ref('');
 const list = ref([]);

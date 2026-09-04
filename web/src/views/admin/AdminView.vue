@@ -32,16 +32,36 @@
 
     <!-- 订单管理：全部订单 -->
     <div v-if="tab === 'orders'" class="section">
-      <van-dropdown-menu>
-        <van-dropdown-item v-model="statusFilter" :options="statusOptions" @change="loadOrders" />
-      </van-dropdown-menu>
+      <!-- 查询区：订单号 / 用户ID -->
+      <van-cell-group inset class="order-fitler-wrap">
+        <div class="search-row">
+          <van-field v-model="searchOrderNo" placeholder="按订单号查询（如 KD5687213621）" clearable />
+          <van-button size="small" round type="primary" @click="loadOrders">搜索</van-button>
+        </div>
+        <div class="search-row">
+          <van-field v-model="searchUid" placeholder="按用户ID查询其发布的所有订单" clearable />
+          <van-button size="small" round type="primary" @click="loadOrders">搜索</van-button>
+        </div>
+        <div class="search-reset" @click="onResetSearch">重置搜索</div>
+      </van-cell-group>
+
+      <!-- 状态筛选（z-index 提升避免被遮挡） -->
+      <div class="filter-wrap">
+        <van-dropdown-menu>
+          <van-dropdown-item v-model="statusFilter" :options="statusOptions" @change="loadOrders" />
+        </van-dropdown-menu>
+      </div>
+
       <div v-for="o in allOrders" :key="o.id" class="card">
         <div class="card-top">
           <b>￥{{ o.reward.toFixed(2) }}</b>
-          <span class="tag">{{ o.status }}</span>
+          <span class="tag" :class="`tag--${o.status}`">{{ statusText(o.status) }}</span>
         </div>
-        <div class="card-line">{{ o.orderNo }} · {{ o.station }} · {{ o.deliverPlace }}</div>
-        <div class="card-line muted">雇主 #{{ o.publisherId }} · 跑腿 #{{ o.runnerId || '-' }}</div>
+        <div class="card-line">
+          <span class="copyable copyable--inline" @click="copyText(o.orderNo, '订单号')">{{ o.orderNo }}</span>
+          · {{ o.station }} · {{ o.deliverPlace }}
+        </div>
+        <div class="card-line muted">雇主 {{ o.publisherName }}（ID {{ o.publisherUid }}） · 跑腿 {{ o.runnerName || '-' }}（ID {{ o.runnerUid || '-' }}）</div>
       </div>
     </div>
 
@@ -174,7 +194,9 @@
           <div class="user-main">
             <div class="user-name-row">
               <b>{{ u.username }}</b>
-              <span class="muted">ID: {{ u.uid || '未分配' }}</span>
+              <span class="muted">ID:
+                <span class="copyable copyable--inline" @click.stop="copyText(u.uid, '用户ID')">{{ u.uid || '未分配' }}</span>
+              </span>
               <span v-if="u.role === 'admin'" class="tag">管理员</span>
             </div>
             <div class="muted">{{ u.phone || '未填手机号' }} · {{ campusName(u.campus) }}</div>
@@ -217,6 +239,7 @@ import { useRouter } from 'vue-router';
 import { showToast, showConfirmDialog, showImagePreview, showSuccessToast } from 'vant';
 import api from '../../api';
 import { clearAuth } from '../../store';
+import { copyText } from '../../utils/copy';
 
 const router = useRouter();
 const tab = ref('check');
@@ -241,17 +264,45 @@ async function markPaid(o) {
 /* ---------- 订单管理 ---------- */
 const statusFilter = ref('');
 const allOrders = ref([]);
+const searchOrderNo = ref('');
+const searchUid = ref('');
 const statusOptions = [
   { text: '全部', value: '' },
-  { text: '待支付', value: 'PAYING' },
-  { text: '待接单', value: 'PAID' },
-  { text: '已接单', value: 'ACCEPTED' },
+  { text: '发布中·待支付', value: 'PAYING' },
+  { text: '发布中·待接单', value: 'PAID' },
+  { text: '进行中·已接单', value: 'ACCEPTED' },
+  { text: '进行中·待确认', value: 'DELIVERED' },
   { text: '已完成', value: 'CONFIRMED' },
+  { text: '已完成·已结算', value: 'SETTLED' },
   { text: '已取消', value: 'CANCELED' },
 ];
+const STATUS_TEXT = {
+  PAYING: '发布中·待支付',
+  PAID: '发布中·待接单',
+  ACCEPTED: '进行中·已接单',
+  DELIVERED: '进行中·待确认',
+  CONFIRMED: '已完成',
+  SETTLED: '已完成·已结算',
+  CANCELED: '已取消',
+};
+const statusText = (s) => STATUS_TEXT[s] || s;
+
 async function loadOrders() {
-  const res = await api.get('/admin/orders', { params: { status: statusFilter.value } });
+  const res = await api.get('/admin/orders', {
+    params: {
+      status: statusFilter.value || undefined,
+      orderNo: searchOrderNo.value || undefined,
+      uid: searchUid.value || undefined,
+    },
+  });
   allOrders.value = res.data;
+}
+
+function onResetSearch() {
+  searchOrderNo.value = '';
+  searchUid.value = '';
+  statusFilter.value = '';
+  loadOrders();
 }
 
 /* ---------- 每日结算 ---------- */
@@ -541,6 +592,51 @@ onMounted(() => {
 .sum {
   color: #fa550f;
   font-weight: 600;
+}
+/* 订单管理查询区 */
+.order-fitler-wrap {
+  margin-bottom: 12px;
+}
+.search-row {
+  display: flex;
+  align-items: center;
+  padding: 6px 12px 6px 0;
+}
+.search-row .van-field {
+  flex: 1;
+}
+.search-row .van-button {
+  margin-left: 8px;
+}
+.search-reset {
+  padding: 8px 16px 10px;
+  font-size: 13px;
+  color: #00a870;
+  text-align: right;
+}
+/* 状态筛选容器 z-index 提升，避免下拉被其它元素遮挡 */
+.filter-wrap {
+  position: relative;
+  z-index: 3000;
+}
+.tag--PAYING,
+.tag--PAID {
+  background: #fff2f0;
+  color: #fa550f;
+}
+.tag--ACCEPTED,
+.tag--DELIVERED {
+  background: #f0f6ff;
+  color: #3d7eff;
+}
+.tag--CONFIRMED,
+.tag--SETTLED {
+  background: #e6f7f0;
+  color: #00a870;
+}
+.tag--CANCELED {
+  background: #f2f3f5;
+  color: #9aa0a6;
 }
 /* 名称列表行（驿站/目的地） */
 .name-row {

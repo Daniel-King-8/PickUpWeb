@@ -48,12 +48,37 @@ module.exports = (ctx) => {
 
   /* ---------- 订单核对 ---------- */
 
-  /** 订单列表（默认按状态筛选，含付款截图地址，供核对） */
+  /**
+   * 订单列表（支持筛选）：
+   * - status：按状态
+   * - orderNo：按订单号精确查询
+   * - uid：按用户ID查询其发布的全部订单
+   */
   router.get('/orders', async (req, res) => {
-    const { status = '' } = req.query;
-    const where = status ? { status } : {};
+    const { status = '', orderNo = '', uid = '' } = req.query;
+    const where = {};
+    if (status) where.status = status;
+    if (orderNo) {
+      where.orderNo = String(orderNo).slice(0, 32);
+    }
+    if (uid) {
+      const u = await User.findOne({ where: { uid: String(uid) } });
+      if (!u) return res.json({ code: 0, data: [] }); // 无此用户 ID → 空列表
+      where.publisherId = u.id;
+    }
     const list = await Order.findAll({ where, order: [['id', 'DESC']], limit: 200 });
-    return res.json({ code: 0, data: list });
+    // 附用户信息（雇主/跑腿员姓名与 10 位用户ID）
+    const umap = await userMapByIds(list.flatMap((o) => [o.publisherId, o.runnerId]));
+    return res.json({
+      code: 0,
+      data: list.map((o) => ({
+        ...o.toJSON(),
+        publisherName: umap[o.publisherId] ? umap[o.publisherId].username : '',
+        publisherUid: umap[o.publisherId] ? umap[o.publisherId].uid : String(o.publisherId || ''),
+        runnerName: umap[o.runnerId] ? umap[o.runnerId].username : '',
+        runnerUid: umap[o.runnerId] ? umap[o.runnerId].uid : String(o.runnerId || ''),
+      })),
+    });
   });
 
   /** 核对后标记已支付（PAYING → PAID，订单进入待接单） */

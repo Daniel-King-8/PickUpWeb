@@ -5,6 +5,11 @@
       填写快递信息，系统自动计算跑腿费。提交后扫码或加微信付款，管理员确认后即刻发布。
     </div>
 
+    <!-- 红色提示：付款前先加管理员 -->
+    <div class="pay-warn" v-if="contactWechat">
+      ⚠️ 提交订单后请添加管理员({{ contactWechat }})进行付款
+    </div>
+
     <van-form class="form">
       <van-cell-group inset title="取件信息">
         <van-field
@@ -23,13 +28,20 @@
         />
         <div class="fee-box" v-if="feeDetail">
           <div class="fee-main">
-            <span>跑腿费</span>
-            <b class="fee-num">￥{{ feeDetail.reward.toFixed(2) }}</b>
+            <span>最低悬赏</span>
+            <b class="fee-num">最低 ￥{{ minReward.toFixed(2) }}</b>
           </div>
           <div class="fee-detail">
-            {{ feeDetail.detail }} · 到店付款时平台收服务费 ￥{{ feeDetail.fee.toFixed(2) }}
+            {{ feeDetail.detail }} · 雇主可自行提高悬赏金额
           </div>
         </div>
+        <van-field
+          v-model="form.reward"
+          type="digits"
+          label="悬赏金额(元)"
+          :placeholder="`最低 ${minReward.toFixed(2)} 元`"
+          maxlength="6"
+        />
 
         <van-field
           v-model="form.destination"
@@ -108,9 +120,11 @@ const form = reactive({
   pickupCode: '',
   destination: '', // 目的地（下拉选择）
   roomNo: '', // 房间号（补充填写）
+  reward: '', // 悬赏金额（可自定义，最低 1+平台费）
   contactPhone: '',
   remark: '',
 });
+const contactWechat = ref(''); // 管理员联系方式（付款提示）
 
 /** 驿站点击列表（名称数组） */
 const stationActions = computed(() => {
@@ -131,9 +145,12 @@ const feeDetail = computed(() => {
   return {
     reward: 1 + fee,
     fee,
-    detail: `基础 ¥1（跑腿员）+ 平台费 ¥${fee.toFixed(2)}`,
+    detail: `最低 ×1（跑腿员）+ 平台费 ¥${fee.toFixed(2)}`,
   };
 });
+
+/** 最低悬赏金额 */
+const minReward = computed(() => (feeDetail.value ? feeDetail.value.reward : 1));
 
 const user = getUser();
 const CAMPUS = user && user.campus;
@@ -147,11 +164,22 @@ onMounted(async () => {
   // 按当前用户校区拉费率规则（各校独立配置）
   const res = await api.get('/public/fee-rules', { params: { campus: CAMPUS } });
   rules.value = res.data;
+  // 悬赏金额默认填最低值（1+平台费），雇主可自行上调
+  if (!form.reward) {
+    form.reward = Number((minReward.value).toFixed(2));
+  }
   // 上次填写的信息自动填入（目的地/房间号分开存）
   form.destination = localStorage.getItem('lastDestination') || '';
   form.roomNo = localStorage.getItem('lastRoomNo') || '';
   if (localStorage.getItem('lastPhone')) {
     form.contactPhone = localStorage.getItem('lastPhone');
+  }
+  // 管理员联系方式（红色付款提示）
+  try {
+    const pi = await api.get('/public/pay-info');
+    contactWechat.value = pi.data.contactWechat || '';
+  } catch (e) {
+    /* 忽略 */
   }
 });
 
@@ -172,10 +200,16 @@ async function onSubmit() {
     showToast('请填写完整取件信息');
     return;
   }
+  const rewardNum = Number(form.reward);
+  if (!form.reward || Number.isNaN(rewardNum) || rewardNum < minReward.value) {
+    showToast(`悬赏金额不能低于 ¥${minReward.value.toFixed(2)}`);
+    return;
+  }
   submitting.value = true;
   try {
     const res = await api.post('/orders', {
       ...form,
+      reward: rewardNum,
       deliverPlace: `${form.destination}${form.roomNo ? ` ${form.roomNo}` : ''}`,
     });
     // 记住常用信息，下次自动填入
@@ -203,6 +237,18 @@ async function onSubmit() {
   background: #f0faf5;
   color: #00885c;
   font-size: 13px;
+}
+.pay-warn {
+  margin: 0 16px 12px;
+  padding: 12px 16px;
+  border-radius: 8px;
+  background: #fff2f0;
+  color: #fa3534;
+  font-size: 13px;
+  font-weight: 500;
+}
+.pay-warn:empty {
+  display: none;
 }
 .form {
   margin-top: 8px;

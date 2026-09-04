@@ -49,7 +49,23 @@ module.exports = (ctx) => {
     }
     const rules = await getFeeRulesForCampus(user.campus);
     if (!rules) return res.status(500).json({ code: 500, message: '费率未配置，联系管理员' });
-    const { reward, fee } = calcFee(rules);
+    const { reward: baseReward, fee } = calcFee(rules);
+
+    // 悬赏金额：雇主可自定义，最低 = 1 + 平台费（跑腿员保底 + 平台费）
+    let reward = baseReward;
+    const custom = Number(req.body.reward);
+    if (req.body.reward !== undefined && req.body.reward !== null && req.body.reward !== '') {
+      if (Number.isNaN(custom) || custom < baseReward) {
+        return res.status(400).json({
+          code: 400,
+          message: `悬赏金额不得低于 ${baseReward.toFixed(2)} 元（基础 ¥1 + 平台费 ¥${fee.toFixed(2)}）`,
+        });
+      }
+      if (custom > 500) {
+        return res.status(400).json({ code: 400, message: '悬赏金额最高 500 元' });
+      }
+      reward = Number(custom.toFixed(2));
+    }
 
     const order = await Order.create({
       orderNo: generateOrderNo(),
