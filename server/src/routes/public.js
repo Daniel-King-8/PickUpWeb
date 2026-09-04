@@ -16,16 +16,34 @@ module.exports = () => {
     return s ? JSON.parse(s.value) : null;
   }
 
-  /** 费率与算费规则（含驿站列表、楼栋区间） */
+  /** 按校区取费率规则（含驿站列表、楼栋区间），缺省用 scyz */
+  async function getRulesByCampus(campus) {
+    const s = await Setting.findOne({ where: { key: 'feeRules' } });
+    if (!s) return null;
+    let data;
+    try {
+      data = JSON.parse(s.value);
+    } catch (e) {
+      return null;
+    }
+    if (data && data.campuses) {
+      return data.campuses[campus] || data.campuses.scyz || null;
+    }
+    return data;
+  }
+
+  /** 费率与算费规则（?campus=scyz|cdny） */
   router.get('/fee-rules', async (req, res) => {
-    const rules = await getSettingJson('feeRules');
+    const campus = req.query.campus || 'scyz';
+    const rules = await getRulesByCampus(campus);
+    if (!rules) return res.status(500).json({ code: 500, message: '费率未配置' });
     return res.json({ code: 0, data: rules });
   });
 
-  /** 实时算费：station + deliverPlace → { reward, fee, detail } */
+  /** 实时算费：station + deliverPlace + campus → { reward, fee, detail } */
   router.get('/fee', async (req, res) => {
-    const { station, deliverPlace } = req.query;
-    const rules = await getSettingJson('feeRules');
+    const { station, deliverPlace, campus = 'scyz' } = req.query;
+    const rules = await getRulesByCampus(campus);
     if (!rules) return res.status(500).json({ code: 500, message: '费率未配置' });
     const result = calcFee(rules, station, deliverPlace);
     return res.json({ code: 0, data: result });

@@ -119,14 +119,17 @@ const towerActions = computed(() => {
   return Array.from({ length: max }, (_, i) => ({ name: `${i + 1}号楼`, value: i + 1 }));
 });
 
+const user = getUser();
+const CAMPUS = user && user.campus;
+
 onMounted(async () => {
-  const user = getUser();
   // 普通用户看到首页即下单页；管理员进后台
   if (user && user.role === 'admin') {
     router.replace('/admin');
     return;
   }
-  const res = await api.get('/public/fee-rules');
+  // 按当前用户校区拉费率规则（各校独立配置）
+  const res = await api.get('/public/fee-rules', { params: { campus: CAMPUS } });
   rules.value = res.data;
   if (localStorage.getItem('lastDeliverPlace')) {
     form.deliverPlace = localStorage.getItem('lastDeliverPlace');
@@ -136,14 +139,14 @@ onMounted(async () => {
   }
 });
 
-/** 实时算费（驿站 + 送达地都填了才请求） */
+/** 实时算费（驿站 + 送达地都填了才请求，按用户校区计算） */
 async function refreshFee() {
   if (!form.station || !form.deliverPlace) {
     feeDetail.value = null;
     return;
   }
   const res = await api.get('/public/fee', {
-    params: { station: form.station, deliverPlace: form.deliverPlace },
+    params: { station: form.station, deliverPlace: form.deliverPlace, campus: CAMPUS },
   });
   feeDetail.value = res.data;
 }

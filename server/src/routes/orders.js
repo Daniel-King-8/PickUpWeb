@@ -19,10 +19,21 @@ module.exports = (ctx) => {
   const router = express.Router();
   const { auth } = ctx;
 
-  /** 读费率规则 */
-  async function getFeeRules() {
+  /** 读费率规则（按校区取；兼容旧格式未分级数据） */
+  async function getFeeRulesForCampus(campus) {
     const s = await Setting.findOne({ where: { key: 'feeRules' } });
-    return s ? JSON.parse(s.value) : null;
+    if (!s) return null;
+    let data;
+    try {
+      data = JSON.parse(s.value);
+    } catch (e) {
+      return null;
+    }
+    if (data && data.campuses) {
+      return data.campuses[campus] || data.campuses.scyz || null;
+    }
+    // 旧格式：未按校区分级，两校区共用
+    return data;
   }
 
   /** 下单 */
@@ -36,7 +47,7 @@ module.exports = (ctx) => {
     if (!user || !user.campus) {
       return res.status(400).json({ code: 400, message: '请先选择所在校区' });
     }
-    const rules = await getFeeRules();
+    const rules = await getFeeRulesForCampus(user.campus);
     if (!rules) return res.status(500).json({ code: 500, message: '费率未配置，联系管理员' });
     const { reward, fee } = calcFee(rules, station, deliverPlace);
 

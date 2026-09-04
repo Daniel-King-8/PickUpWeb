@@ -101,29 +101,36 @@
 
     <!-- 设置 -->
     <div v-if="tab === 'settings'" class="section">
-      <van-cell-group inset title="费率与抽成">
+      <van-cell-group inset title="费率与抽成（按校区独立设置）">
+        <van-tabs v-model:active="feeCampus" shrink>
+          <van-tab title="四川邮电" name="scyz" />
+          <van-tab title="成都农业" name="cdny" />
+        </van-tabs>
         <van-field
-          v-model="settingsForm.stationJson"
+          :model-value="campusForms[feeCampus].stationJson"
           label="驿站基础价"
           type="textarea"
           autosize
           rows="4"
           placeholder='JSON：{"菜鸟驿站":2,"顺丰驿站":2.5}'
+          @update:model-value="(v) => (campusForms[feeCampus].stationJson = v)"
         />
         <van-field
-          v-model="settingsForm.towerJson"
+          :model-value="campusForms[feeCampus].towerJson"
           label="楼栋附加"
           type="textarea"
           autosize
           rows="4"
           placeholder='JSON：[{"from":6,"to":11,"extra":0.5}]'
+          @update:model-value="(v) => (campusForms[feeCampus].towerJson = v)"
         />
         <van-field
-          v-model="settingsForm.commissionJson"
+          :model-value="campusForms[feeCampus].commissionJson"
           label="抽成规则"
           placeholder='{"type":"fixed","value":0.5}'
+          @update:model-value="(v) => (campusForms[feeCampus].commissionJson = v)"
         />
-        <van-button class="save-btn" round block type="primary" @click="saveFeeRules">保存费率</van-button>
+        <van-button class="save-btn" round block type="primary" @click="saveFeeRules">保存费率（当前校区）</van-button>
       </van-cell-group>
 
       <van-cell-group inset title="收款码">
@@ -164,7 +171,7 @@
 </template>
 
 <script setup>
-import { onMounted, ref, watch } from 'vue';
+import { onMounted, reactive, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { showToast, showConfirmDialog, showImagePreview, showSuccessToast } from 'vant';
 import api from '../../api';
@@ -241,11 +248,26 @@ async function markSettlePaid(s) {
   loadSettlements();
 }
 
-/* ---------- 设置 ---------- */
-const settingsForm = ref({ stationJson: '', towerJson: '', commissionJson: '' });
+/* ---------- 设置（按校区） ---------- */
+const feeCampus = ref('scyz');
+// 每个校区独立一组表单值
+const campusForms = reactive({
+  scyz: { stationJson: '', towerJson: '', commissionJson: '' },
+  cdny: { stationJson: '', towerJson: '', commissionJson: '' },
+});
 const qrWx = ref('');
 const qrAli = ref('');
 const contactWechat = ref('');
+
+/** 把单个校区规则写入对应表单（兼容明细格式） */
+function fillCampusForm(key, rules) {
+  campusForms[key] = {
+    stationJson: JSON.stringify(rules.stations || {}, null, 2),
+    towerJson: JSON.stringify(rules.towerRules || [], null, 2),
+    commissionJson: JSON.stringify(rules.commission || { type: 'fixed', value: 0 }),
+  };
+}
+
 async function loadSettings() {
   const res = await api.get('/admin/settings');
   const map = {};
@@ -253,12 +275,16 @@ async function loadSettings() {
     map[s.key] = s.value;
   });
   try {
-    const rules = JSON.parse(map.feeRules || '{}');
-    settingsForm.value = {
-      stationJson: JSON.stringify(rules.stations, null, 2),
-      towerJson: JSON.stringify(rules.towerRules, null, 2),
-      commissionJson: JSON.stringify(rules.commission),
-    };
+    const raw = JSON.parse(map.feeRules || '{}');
+    if (raw && raw.campuses) {
+      // 新分级结构：按校区逐栏填充
+      fillCampusForm('scyz', raw.campuses.scyz || {});
+      fillCampusForm('cdny', raw.campuses.cdny || {});
+    } else {
+      // 旧结构：两个校区共用同一组规则
+      fillCampusForm('scyz', raw);
+      fillCampusForm('cdny', raw);
+    }
   } catch (e) {
     /* 忽略不合法 JSON */
   }
@@ -266,19 +292,45 @@ async function loadSettings() {
   qrAli.value = map.payQrAlipay || '';
   contactWechat.value = map.contactWechat || '';
 }
+
 async function saveFeeRules() {
-  let data;
+  const key = feeCampus.value;
+  let rules;
   try {
-    data = {
-      stations: JSON.parse(settingsForm.value.stationJson),
-      towerRules: JSON.parse(settingsForm.value.towerJson),
-      commission: JSON.parse(settingsForm.value.commissionJson),
+    rules = {
+      stations: JSON.parse(campusForms[key].stationJson),
+      towerRules: JSON.parse(campusForms[key].towerJson),
+      commission: JSON.parse(campusForms[key].commissionJson),
     };
   } catch (e) {
     return showToast('JSON 格式有误，请检查');
   }
-  await api.put('/admin/settings', { key: 'feeRules', value: data });
-  showSuccessToast('费率已保存');
+  // 构建完整分级结构：先读现有（若以前是旧结构则两个校区都补上默认）
+  const res = await api.get('/admin/settings');
+  const cur = (res.data.find((s) => s.key === 'feeRules') || {}).value;
+  let campuses = {};
+  try {
+    const raw = JSON.parse(cur || '{}');
+    if (raw && raw.campuses) campuses = raw.campuses;
+    else {
+      campuses = {
+        scyz: fillToPlain(raw),
+        cdny: fillToPlain(raw),
+      };
+    }
+  } catch (e) {
+    campuses = {};
+  }
+  campuses[key] = rules;
+  await api.put('/admin/settings', { key: 'feeRules', value: { campuses } });
+  showSuccessToast(`「${key === 'scyz' ? '四川邮电' : '成都农业'}」费率已保存`);
+}
+
+/** 旧结构转标准结构（若无值给出空规则） */
+function fillToPlain(raw) {
+  return raw && typeof raw === 'object'
+    ? { stations: raw.stations || {}, towerRules: raw.towerRules || [], commission: raw.commission || { type: 'fixed', value: 0 } }
+    : { stations: {}, towerRules: [], commission: { type: 'fixed', value: 0 } };
 }
 function uploadQr(type) {
   const input = document.createElement('input');

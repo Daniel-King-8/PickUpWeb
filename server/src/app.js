@@ -63,17 +63,28 @@ async function bootstrap() {
 
   // 2. 默认费率设置（幂等）
   const defaults = {
-    // 驿站基础价（元）
+    // 费率规则（按校区独立配置，服务端以 campuses[校区] 为准）
     feeRules: JSON.stringify({
-      stations: { 菜鸟驿站: 2, 顺丰驿站: 2.5, 韵达驿站: 2.5, 京东驿站: 3, 其他: 2 },
-      // 楼栋附加费：按送达地址中解析出的楼栋编号匹配 from-to 区间
-      towerRules: [
-        { from: 1, to: 5, extra: 0 },
-        { from: 6, to: 11, extra: 0.5 },
-        { from: 12, to: 99, extra: 1 },
-      ],
-      // 抽成规则：type=fixed 固定金额/单，type=percent 按比例（后台可改）
-      commission: { type: 'fixed', value: 0.5 },
+      campuses: {
+        scyz: {
+          stations: { 菜鸟驿站: 2, 顺丰驿站: 2.5, 韵达驿站: 2.5, 京东驿站: 3, 其他: 2 },
+          towerRules: [
+            { from: 1, to: 5, extra: 0 },
+            { from: 6, to: 11, extra: 0.5 },
+            { from: 12, to: 99, extra: 1 },
+          ],
+          commission: { type: 'fixed', value: 0.5 },
+        },
+        cdny: {
+          stations: { 菜鸟驿站: 2, 顺丰驿站: 2.5, 韵达驿站: 2.5, 京东驿站: 3, 其他: 2 },
+          towerRules: [
+            { from: 1, to: 5, extra: 0 },
+            { from: 6, to: 11, extra: 0.5 },
+            { from: 12, to: 99, extra: 1 },
+          ],
+          commission: { type: 'fixed', value: 0.5 },
+        },
+      },
     }),
     payQrWx: '', // 微信收款码图片路径（管理后台上传）
     payQrAlipay: '', // 支付宝收款码图片路径
