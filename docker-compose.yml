@@ -1,47 +1,24 @@
 # 取个件呗 Web 版 —— Docker Compose 部署配置
+# 数据库：使用 1Panel 已安装的 MySQL（宿主 127.0.0.1:3306），不再内置容器
 # 使用：docker compose up -d --build
 services:
-  # ---------- MySQL 数据库（独立容器）----------
-  mysql:
-    image: mysql:8.0
-    container_name: pickup-mysql
-    restart: unless-stopped
-    environment:
-      - MYSQL_DATABASE=pickup
-      - MYSQL_USER=pickup
-      - MYSQL_PASSWORD=pickup_pass_2026
-      - MYSQL_ROOT_PASSWORD=root_pass_2026
-      - TZ=Asia/Shanghai
-    volumes:
-      # 数据库文件持久化到宿主机 ./data/mysql
-      - ./data/mysql:/var/lib/mysql
-    healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-proot_pass_2026"]
-      interval: 5s
-      timeout: 5s
-      retries: 30
-    # 若需要本机用工具管理数据库，可取消下行注释（仅在内网使用）
-    # ports:
-    #   - "3306:3306"
-
-  # ---------- 业务服务 ----------
   pickup-web:
     build: .
     image: pickup-web:latest
     container_name: pickup-web
     restart: unless-stopped
-    ports:
-      - "3000:3000"
+    # host 网络：容器与宿主机共享网络栈，直连 1Panel MySQL(127.0.0.1:3306)
+    network_mode: host
     environment:
       - PORT=3000
-      # 使用 MySQL（详见上方 mysql 服务）
+      # ---------- MySQL（1Panel 创建的 KD 库）----------
       - USE_MYSQL=1
-      - DB_HOST=mysql
+      - DB_HOST=127.0.0.1
       - DB_PORT=3306
-      - DB_NAME=pickup
-      - DB_USER=pickup
-      - DB_PASSWORD=pickup_pass_2026
-      # 图片上传目录（与 MySQL 数据同卷）
+      - DB_NAME=KD
+      - DB_USER=KD
+      - DB_PASSWORD=kdkdkd
+      # 图片上传目录（挂宿主机卷持久化）
       - UPLOAD_DIR=/data/uploads
       # 【必改】管理员初始密码（首次启动创建 admin 账号用）
       - ADMIN_PASSWORD=Wyc50818
@@ -52,6 +29,3 @@ services:
     volumes:
       # 上传文件持久化到宿主机 ./data/uploads
       - ./data:/data
-    depends_on:
-      mysql:
-        condition: service_healthy
