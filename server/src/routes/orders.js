@@ -49,7 +49,7 @@ module.exports = (ctx) => {
     }
     const rules = await getFeeRulesForCampus(user.campus);
     if (!rules) return res.status(500).json({ code: 500, message: '费率未配置，联系管理员' });
-    const { reward, fee } = calcFee(rules, station, deliverPlace);
+    const { reward, fee } = calcFee(rules);
 
     const order = await Order.create({
       orderNo: generateOrderNo(),
@@ -67,13 +67,40 @@ module.exports = (ctx) => {
     return res.json({ code: 0, data: { orderId: order.id, orderNo: order.orderNo, reward, fee } });
   });
 
+  /** 订单列表附交易对手信息（publisherUid 等，供页面显示对方 ID） */
+  async function attachUserInfo(list) {
+    const ids = [];
+    list.forEach((o) => {
+      if (o.publisherId) ids.push(o.publisherId);
+      if (o.runnerId) ids.push(o.runnerId);
+    });
+    if (ids.length === 0) return list;
+    const uniq = [...new Set(ids)];
+    const users = await User.findAll({ where: { id: uniq } });
+    const umap = {};
+    users.forEach((u) => {
+      umap[u.id] = { uid: u.uid, username: u.username };
+    });
+    return list.map((o) => {
+      const p = umap[o.publisherId];
+      const r = umap[o.runnerId];
+      return {
+        ...o.toJSON(),
+        publisherUid: p ? p.uid : '',
+        publisherName: p ? p.username : '',
+        runnerUid: r ? r.uid : '',
+        runnerName: r ? r.username : '',
+      };
+    });
+  }
+
   /** 我的订单（雇主视角） */
   router.get('/mine', auth, async (req, res) => {
     const list = await Order.findAll({
       where: { publisherId: req.user.id },
       order: [['id', 'DESC']],
     });
-    return res.json({ code: 0, data: list });
+    return res.json({ code: 0, data: await attachUserInfo(list) });
   });
 
   /** 我的跑单（跑腿员视角） */
@@ -82,7 +109,7 @@ module.exports = (ctx) => {
       where: { runnerId: req.user.id },
       order: [['id', 'DESC']],
     });
-    return res.json({ code: 0, data: list });
+    return res.json({ code: 0, data: await attachUserInfo(list) });
   });
 
   /** 接单大厅（已支付待接单；取件码全脱敏；【校区隔离】仅本校区订单） */
@@ -112,7 +139,7 @@ module.exports = (ctx) => {
   router.get('/:id', auth, async (req, res) => {
     const order = await Order.findByPk(req.params.id);
     if (!order) return res.status(404).json({ code: 404, message: '订单不存在' });
-    const json = order.toJSON();
+    const [json] = await attachUserInfo([order]);
     const isPublisher = order.publisherId === req.user.id;
     const isRunner = order.runnerId === req.user.id;
     if (!isPublisher && !isRunner) {

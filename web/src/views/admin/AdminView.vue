@@ -101,35 +101,46 @@
 
     <!-- 设置 -->
     <div v-if="tab === 'settings'" class="section">
-      <van-cell-group inset title="费率与抽成（按校区独立设置）">
+      <van-cell-group inset title="费率设置（按校区独立）">
         <van-tabs v-model:active="feeCampus" shrink>
           <van-tab title="四川邮电" name="scyz" />
           <van-tab title="成都农业" name="cdny" />
         </van-tabs>
+
+        <!-- 平台费 -->
         <van-field
-          :model-value="campusForms[feeCampus].stationJson"
-          label="驿站基础价"
-          type="textarea"
-          autosize
-          rows="4"
-          placeholder='JSON：{"菜鸟驿站":2,"顺丰驿站":2.5}'
-          @update:model-value="(v) => (campusForms[feeCampus].stationJson = v)"
+          :model-value="campusForms[feeCampus].platformFee"
+          type="number"
+          label="平台费(元/单)"
+          placeholder="如 1.5"
+          @update:model-value="(v) => (campusForms[feeCampus].platformFee = v)"
         />
-        <van-field
-          :model-value="campusForms[feeCampus].towerJson"
-          label="楼栋附加"
-          type="textarea"
-          autosize
-          rows="4"
-          placeholder='JSON：[{"from":6,"to":11,"extra":0.5}]'
-          @update:model-value="(v) => (campusForms[feeCampus].towerJson = v)"
-        />
-        <van-field
-          :model-value="campusForms[feeCampus].commissionJson"
-          label="抽成规则"
-          placeholder='{"type":"fixed","value":0.5}'
-          @update:model-value="(v) => (campusForms[feeCampus].commissionJson = v)"
-        />
+        <div class="form-note">每单总价 = 平台费 + 基础 ¥1（固定给跑腿员）</div>
+
+        <!-- 驿站列表 -->
+        <van-divider>驿站列表（仅作下单选项，不计价格）</van-divider>
+        <div v-for="(s, idx) in campusForms[feeCampus].stations" :key="'st' + idx" class="name-row">
+          <van-field
+            :model-value="s"
+            placeholder="驿站名称，如 菜鸟驿站"
+            @update:model-value="(v) => (campusForms[feeCampus].stations[idx] = v)"
+          />
+          <van-button icon="delete-o" plain round size="small" @click="removeName('stations', idx)" />
+        </div>
+        <van-button size="small" plain round icon="plus" class="add-btn" @click="addName('stations')">添加驿站</van-button>
+
+        <!-- 目的地列表 -->
+        <van-divider>目的地列表（送达地点选项）</van-divider>
+        <div v-for="(d, idx) in campusForms[feeCampus].destinations" :key="'de' + idx" class="name-row">
+          <van-field
+            :model-value="d"
+            placeholder="如 1-5号楼 / 西一区"
+            @update:model-value="(v) => (campusForms[feeCampus].destinations[idx] = v)"
+          />
+          <van-button icon="delete-o" plain round size="small" @click="removeName('destinations', idx)" />
+        </div>
+        <van-button size="small" plain round icon="plus" class="add-btn" @click="addName('destinations')">添加目的地</van-button>
+
         <van-button class="save-btn" round block type="primary" @click="saveFeeRules">保存费率（当前校区）</van-button>
       </van-cell-group>
 
@@ -280,21 +291,34 @@ async function markSettlePaid(s) {
 
 /* ---------- 设置（按校区） ---------- */
 const feeCampus = ref('scyz');
-// 每个校区独立一组表单值
+// 每个校区独立一组表单值：平台费 + 驿站名称列表 + 目的地名称列表
 const campusForms = reactive({
-  scyz: { stationJson: '', towerJson: '', commissionJson: '' },
-  cdny: { stationJson: '', towerJson: '', commissionJson: '' },
+  scyz: { platformFee: '', stations: [], destinations: [] },
+  cdny: { platformFee: '', stations: [], destinations: [] },
 });
 const qrWx = ref('');
 const qrAli = ref('');
 const contactWechat = ref('');
 
-/** 把单个校区规则写入对应表单（兼容明细格式） */
+/** 旧结构兼容：towerRules → 目的地名称 */
+function destFromTower(towerRules) {
+  return (towerRules || []).map((t) =>
+    t.from === t.to ? `${t.from}号楼` : `${t.from}-${t.to}号楼`
+  );
+}
+
+/** 把单个校区规则写入对应表单 */
 function fillCampusForm(key, rules) {
   campusForms[key] = {
-    stationJson: JSON.stringify(rules.stations || {}, null, 2),
-    towerJson: JSON.stringify(rules.towerRules || [], null, 2),
-    commissionJson: JSON.stringify(rules.commission || { type: 'fixed', value: 0 }),
+    platformFee: String(rules.platformFee != null ? rules.platformFee : 1.5),
+    stations: Array.isArray(rules.stations)
+      ? [...rules.stations]
+      : rules.stations
+        ? Object.keys(rules.stations)
+        : [],
+    destinations: Array.isArray(rules.destinations)
+      ? [...rules.destinations]
+      : destFromTower(rules.towerRules),
   };
 }
 
@@ -307,13 +331,11 @@ async function loadSettings() {
   try {
     const raw = JSON.parse(map.feeRules || '{}');
     if (raw && raw.campuses) {
-      // 新分级结构：按校区逐栏填充
       fillCampusForm('scyz', raw.campuses.scyz || {});
       fillCampusForm('cdny', raw.campuses.cdny || {});
     } else {
-      // 旧结构：两个校区共用同一组规则
-      fillCampusForm('scyz', raw);
-      fillCampusForm('cdny', raw);
+      fillCampusForm('scyz', raw || {});
+      fillCampusForm('cdny', raw || {});
     }
   } catch (e) {
     /* 忽略不合法 JSON */
@@ -323,44 +345,42 @@ async function loadSettings() {
   contactWechat.value = map.contactWechat || '';
 }
 
+/** 列表增删（stations / destinations 通用） */
+function addName(type) {
+  campusForms[feeCampus.value][type].push('');
+}
+function removeName(type, idx) {
+  campusForms[feeCampus.value][type].splice(idx, 1);
+}
+
 async function saveFeeRules() {
   const key = feeCampus.value;
-  let rules;
-  try {
-    rules = {
-      stations: JSON.parse(campusForms[key].stationJson),
-      towerRules: JSON.parse(campusForms[key].towerJson),
-      commission: JSON.parse(campusForms[key].commissionJson),
-    };
-  } catch (e) {
-    return showToast('JSON 格式有误，请检查');
+  const pf = Number(campusForms[key].platformFee);
+  if (Number.isNaN(pf) || pf < 0 || pf > 99) {
+    return showToast('平台费需为 0-99 之间的数字');
   }
-  // 构建完整分级结构：先读现有（若以前是旧结构则两个校区都补上默认）
+  // 过滤空行并去重
+  const clean = (arr) => [...new Set(arr.map((s) => String(s).trim()).filter(Boolean))];
+  const rules = {
+    platformFee: Number(pf.toFixed(2)),
+    stations: clean(campusForms[key].stations),
+    destinations: clean(campusForms[key].destinations),
+  };
+  if (rules.stations.length === 0) return showToast('至少保留一个驿站');
+  if (rules.destinations.length === 0) return showToast('至少保留一个目的地');
+
   const res = await api.get('/admin/settings');
   const cur = (res.data.find((s) => s.key === 'feeRules') || {}).value;
   let campuses = {};
   try {
     const raw = JSON.parse(cur || '{}');
-    if (raw && raw.campuses) campuses = raw.campuses;
-    else {
-      campuses = {
-        scyz: fillToPlain(raw),
-        cdny: fillToPlain(raw),
-      };
-    }
+    campuses = raw && raw.campuses ? raw.campuses : {};
   } catch (e) {
     campuses = {};
   }
   campuses[key] = rules;
   await api.put('/admin/settings', { key: 'feeRules', value: { campuses } });
   showSuccessToast(`「${key === 'scyz' ? '四川邮电' : '成都农业'}」费率已保存`);
-}
-
-/** 旧结构转标准结构（若无值给出空规则） */
-function fillToPlain(raw) {
-  return raw && typeof raw === 'object'
-    ? { stations: raw.stations || {}, towerRules: raw.towerRules || [], commission: raw.commission || { type: 'fixed', value: 0 } }
-    : { stations: {}, towerRules: [], commission: { type: 'fixed', value: 0 } };
 }
 function uploadQr(type) {
   const input = document.createElement('input');
@@ -521,6 +541,24 @@ onMounted(() => {
 .sum {
   color: #fa550f;
   font-weight: 600;
+}
+/* 名称列表行（驿站/目的地） */
+.name-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 14px;
+}
+.name-row .van-field {
+  flex: 1;
+}
+.add-btn {
+  margin: 10px 16px;
+}
+.form-note {
+  margin: 0 16px 10px;
+  font-size: 12px;
+  color: #999;
 }
 .settle-tools {
   display: flex;

@@ -16,7 +16,7 @@ module.exports = () => {
     return s ? JSON.parse(s.value) : null;
   }
 
-  /** 按校区取费率规则（含驿站列表、楼栋区间），缺省用 scyz */
+  /** 按校区取费率规则（含平台费/驿站/目的地名称列表），旧结构自动迁移 */
   async function getRulesByCampus(campus) {
     const s = await Setting.findOne({ where: { key: 'feeRules' } });
     if (!s) return null;
@@ -26,10 +26,21 @@ module.exports = () => {
     } catch (e) {
       return null;
     }
-    if (data && data.campuses) {
-      return data.campuses[campus] || data.campuses.scyz || null;
+    const rules = data && data.campuses ? (data.campuses[campus] || data.campuses.scyz) : data;
+    if (!rules) return null;
+    // 兼容旧结构：stations 对象 → 名称数组；towerRules → 目的地名称；commission → platformFee
+    if (!rules.platformFee) {
+      rules.platformFee = rules.commission && rules.commission.value != null ? rules.commission.value : 1.5;
     }
-    return data;
+    if (!Array.isArray(rules.stations)) {
+      rules.stations = rules.stations ? Object.keys(rules.stations) : [];
+    }
+    if (!Array.isArray(rules.destinations)) {
+      rules.destinations = (rules.towerRules || []).map((t) =>
+        t.from === t.to ? `${t.from}号楼` : `${t.from}-${t.to}号楼`
+      );
+    }
+    return rules;
   }
 
   /** 费率与算费规则（?campus=scyz|cdny） */

@@ -7,6 +7,7 @@
       <div class="avatar">取</div>
       <div class="user-info">
         <div class="name">{{ user.username || '同学' }}</div>
+        <div class="uid">用户ID：{{ user.uid || '--' }}</div>
         <div class="campus">{{ campusName(user.campus) }}</div>
       </div>
     </div>
@@ -130,8 +131,13 @@ function onLogout() {
   font-size: 18px;
   font-weight: 600;
 }
+.uid {
+  margin-top: 4px;
+  font-size: 12px;
+  opacity: 0.85;
+}
 .campus {
-  margin-top: 6px;
+  margin-top: 4px;
   font-size: 12px;
   opacity: 0.9;
 }

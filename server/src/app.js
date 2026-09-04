@@ -75,26 +75,20 @@ async function bootstrap() {
 
   // 2. 默认费率设置（幂等）
   const defaults = {
-    // 费率规则（按校区独立配置，服务端以 campuses[校区] 为准）
+    // 费率规则（按校区独立配置）：
+    // 每单总价 = 基础 ¥1（跑腿员保底） + 平台费（后台可调，平台收入）
+    // stations/destinations 为下单选项（名称列表，不参与计价）
     feeRules: JSON.stringify({
       campuses: {
         scyz: {
-          stations: { 菜鸟驿站: 2, 顺丰驿站: 2.5, 韵达驿站: 2.5, 京东驿站: 3, 其他: 2 },
-          towerRules: [
-            { from: 1, to: 5, extra: 0 },
-            { from: 6, to: 11, extra: 0.5 },
-            { from: 12, to: 99, extra: 1 },
-          ],
-          commission: { type: 'fixed', value: 0.5 },
+          platformFee: 1.5,
+          stations: ['菜鸟驿站', '顺丰驿站', '韵达驿站', '京东驿站'],
+          destinations: ['1-5号楼', '6-11号楼', '12号楼以上'],
         },
         cdny: {
-          stations: { 菜鸟驿站: 2, 顺丰驿站: 2.5, 韵达驿站: 2.5, 京东驿站: 3, 其他: 2 },
-          towerRules: [
-            { from: 1, to: 5, extra: 0 },
-            { from: 6, to: 11, extra: 0.5 },
-            { from: 12, to: 99, extra: 1 },
-          ],
-          commission: { type: 'fixed', value: 0.5 },
+          platformFee: 1.5,
+          stations: ['菜鸟驿站', '顺丰驿站', '韵达驿站', '京东驿站'],
+          destinations: ['1-5号楼', '6-11号楼', '12号楼以上'],
         },
       },
     }),

@@ -37,34 +37,16 @@ function parseTowerNo(place) {
 }
 
 /**
- * 根据费率规则计算跑腿费
- * @param {object} rules 费率规则对象
- * @param {object} r  { stations: {名称: 基础价}, towerRules: [{from,to,extra}], commission: {type,value} }
- * @param {string} station 驿站名
- * @param {string} deliverPlace 送达地址
+ * 计算跑腿费（简化模型）
+ * 每单总价 = 基础 ¥1（跑腿员保底） + 平台费（平台收入，后台可调）
+ * @param {object} rules 费率规则 { platformFee, stations[], destinations[] }
  * @returns {{reward: number, fee: number, detail: string}}
  */
-function calcFee(rules, station, deliverPlace) {
-  const base = (rules.stations && rules.stations[station]) || rules.stations['其他'] || 2;
-  const towerNo = parseTowerNo(deliverPlace);
-  let extra = 0;
-  for (const rule of rules.towerRules || []) {
-    if (towerNo !== null && towerNo >= rule.from && towerNo <= rule.to) {
-      extra = rule.extra;
-      break;
-    }
-  }
-  const reward = Number((base + extra).toFixed(2));
-
-  // 抽成：type=fixed 固定金额 / type=percent 按比例
-  let fee = 0;
-  if (rules.commission && rules.commission.type === 'percent') {
-    fee = Number((reward * rules.commission.value).toFixed(2));
-  } else {
-    fee = Number((rules.commission && rules.commission.value) || 0);
-  }
-
-  return { reward, fee, detail: `基础 ${base} + 楼栋附加 ${extra}` };
+function calcFee(rules) {
+  const fee = Number((rules && rules.platformFee) || 0);
+  const base = 1; // 基础价固定 ¥1，给跑腿员
+  const reward = Number((base + fee).toFixed(2)); // 雇主付总额
+  return { reward, fee, detail: `基础 ¥1 + 平台费 ¥${fee.toFixed(2)}(平台收取)` };
 }
 
 module.exports = { maskCode, generateOrderNo, generateUid, cnToday, parseTowerNo, calcFee };

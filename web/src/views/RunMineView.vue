@@ -11,6 +11,7 @@
           <b class="reward">￥{{ o.reward.toFixed(2) }}</b>
         </div>
         <div class="line">{{ o.station }} · 送至 {{ o.deliverPlace }}</div>
+        <div class="line line-peer">雇主：{{ o.publisherName }}（ID {{ o.publisherUid }}）</div>
         <div class="card-foot">
           <span>{{ o.orderNo }}</span>
           <span class="hint">详情 →</span>
@@ -96,6 +97,10 @@ load();
   margin-top: 8px;
   font-size: 14px;
   color: #333;
+}
+.line-peer {
+  color: #8a8a8a;
+  font-size: 12px;
 }
 .card-foot {
   margin-top: 8px;

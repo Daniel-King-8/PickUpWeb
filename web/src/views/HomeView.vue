@@ -32,13 +32,18 @@
         </div>
 
         <van-field
-          v-model="form.deliverPlace"
-          label="送达地址"
-          placeholder="如：3号楼 302（带楼号）"
-          maxlength="100"
+          v-model="form.destination"
+          label="目的地"
+          placeholder="请选择目的地"
           is-link
           readonly
           @click="showTower = true"
+        />
+        <van-field
+          v-model="form.roomNo"
+          label="房间号"
+          placeholder="如 302（选填）"
+          maxlength="10"
         />
         <van-field
           v-model="form.contactPhone"
@@ -73,14 +78,14 @@
       @select="onPickStation"
     />
 
-    <!-- 送达地址选择：楼栋点击列表（可滚轮滚动） -->
+    <!-- 目的地选择：点击列表（可滚轮滚动） -->
     <van-action-sheet
       v-model:show="showTower"
-      :actions="towerActions"
-      title="选择送达楼栋"
+      :actions="destinationActions"
+      title="选择目的地"
       cancel-text="取消"
       close-on-click-action
-      @select="onPickTower"
+      @select="onPickDestination"
     />
   </div>
 </template>
@@ -94,7 +99,6 @@ import { getUser } from '../store';
 
 const router = useRouter();
 const rules = ref(null); // 费率规则
-const feeDetail = ref(null); // 实时算费结果
 const submitting = ref(false);
 const showStation = ref(false);
 const showTower = ref(false);
@@ -102,21 +106,33 @@ const showTower = ref(false);
 const form = reactive({
   station: '',
   pickupCode: '',
-  deliverPlace: '',
+  destination: '', // 目的地（下拉选择）
+  roomNo: '', // 房间号（补充填写）
   contactPhone: '',
   remark: '',
 });
 
-/** 驿站点击列表 */
+/** 驿站点击列表（名称数组） */
 const stationActions = computed(() => {
   if (!rules.value) return [];
-  return Object.keys(rules.value.stations).map((s) => ({ name: s, value: s }));
+  return (rules.value.stations || []).map((s) => ({ name: s, value: s }));
 });
 
-/** 楼栋点击列表（1-N 号楼） */
-const towerActions = computed(() => {
-  const max = rules.value ? Math.max(...rules.value.towerRules.map((t) => t.to)) : 30;
-  return Array.from({ length: max }, (_, i) => ({ name: `${i + 1}号楼`, value: i + 1 }));
+/** 目的地点击列表（名称数组） */
+const destinationActions = computed(() => {
+  if (!rules.value) return [];
+  return (rules.value.destinations || []).map((d) => ({ name: d, value: d }));
+});
+
+/** 费用展示：基础 ¥1 + 平台费（常量，无需远端算费） */
+const feeDetail = computed(() => {
+  if (!rules.value) return null;
+  const fee = Number(rules.value.platformFee) || 0;
+  return {
+    reward: 1 + fee,
+    fee,
+    detail: `基础 ¥1（跑腿员）+ 平台费 ¥${fee.toFixed(2)}`,
+  };
 });
 
 const user = getUser();
@@ -131,52 +147,40 @@ onMounted(async () => {
   // 按当前用户校区拉费率规则（各校独立配置）
   const res = await api.get('/public/fee-rules', { params: { campus: CAMPUS } });
   rules.value = res.data;
-  if (localStorage.getItem('lastDeliverPlace')) {
-    form.deliverPlace = localStorage.getItem('lastDeliverPlace');
-  }
+  // 上次填写的信息自动填入（目的地/房间号分开存）
+  form.destination = localStorage.getItem('lastDestination') || '';
+  form.roomNo = localStorage.getItem('lastRoomNo') || '';
   if (localStorage.getItem('lastPhone')) {
     form.contactPhone = localStorage.getItem('lastPhone');
   }
 });
 
-/** 实时算费（驿站 + 送达地都填了才请求，按用户校区计算） */
-async function refreshFee() {
-  if (!form.station || !form.deliverPlace) {
-    feeDetail.value = null;
-    return;
-  }
-  const res = await api.get('/public/fee', {
-    params: { station: form.station, deliverPlace: form.deliverPlace, campus: CAMPUS },
-  });
-  feeDetail.value = res.data;
-}
-
 /** 选择驿站（ActionSheet 点击项） */
 function onPickStation(action) {
   form.station = action.name;
   showStation.value = false;
-  refreshFee();
 }
 
-/** 选择楼栋（保留已填房间号） */
-function onPickTower(action) {
-  const match = form.deliverPlace.match(/(\d+号楼)\s*(\d+)?/);
-  const room = match && match[2] ? match[2] : '';
-  form.deliverPlace = room ? `${action.name} ${room}` : action.name;
+/** 选择目的地 */
+function onPickDestination(action) {
+  form.destination = action.name;
   showTower.value = false;
-  refreshFee();
 }
 
 async function onSubmit() {
-  if (!form.station || !form.pickupCode || !form.deliverPlace || !form.contactPhone) {
+  if (!form.station || !form.pickupCode || !form.destination || !form.contactPhone) {
     showToast('请填写完整取件信息');
     return;
   }
   submitting.value = true;
   try {
-    const res = await api.post('/orders', form);
+    const res = await api.post('/orders', {
+      ...form,
+      deliverPlace: `${form.destination}${form.roomNo ? ` ${form.roomNo}` : ''}`,
+    });
     // 记住常用信息，下次自动填入
-    localStorage.setItem('lastDeliverPlace', form.deliverPlace);
+    localStorage.setItem('lastDestination', form.destination);
+    localStorage.setItem('lastRoomNo', form.roomNo || '');
     localStorage.setItem('lastPhone', form.contactPhone);
     showToast('下单成功，请付款');
     router.replace(`/pay/${res.data.orderId}`);
