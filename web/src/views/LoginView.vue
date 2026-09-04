@@ -103,8 +103,14 @@ async function onSubmit() {
     const payload = res.data;
     setAuth(payload.token, payload.user);
     showToast(mode.value === 'login' ? '登录成功' : '注册成功');
-    // 管理员进入后台，普通用户进入下单首页（从 payload 取用户信息）
-    router.replace(payload.user.role === 'admin' ? '/admin' : '/');
+    // 管理员进后台；普通用户：已选校区进大厅，未选校区先去选校区
+    if (payload.user.role === 'admin') {
+      router.replace('/admin');
+    } else if (payload.user.campus) {
+      router.replace('/');
+    } else {
+      router.replace('/campus');
+    }
   } finally {
     loading.value = false;
   }

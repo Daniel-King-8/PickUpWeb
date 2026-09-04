@@ -11,7 +11,7 @@
  * 取值码码权限：大厅列表全脱敏；详情仅 雇主/已抢单跑腿员 可见明文
  */
 const express = require('express');
-const { Order, Setting } = require('../models');
+const { Order, Setting, User } = require('../models');
 const { uploadImage } = require('../middleware/upload');
 const { maskCode, generateOrderNo, calcFee } = require('../utils/helpers');
 
@@ -31,12 +31,18 @@ module.exports = (ctx) => {
     if (!station || !pickupCode || !deliverPlace || !contactPhone) {
       return res.status(400).json({ code: 400, message: '请填写完整信息' });
     }
+    // 【校区硬隔离】订单校区从用户档案继承（前端不可传，服务端为准）
+    const user = await User.findByPk(req.user.id);
+    if (!user || !user.campus) {
+      return res.status(400).json({ code: 400, message: '请先选择所在校区' });
+    }
     const rules = await getFeeRules();
     if (!rules) return res.status(500).json({ code: 500, message: '费率未配置，联系管理员' });
     const { reward, fee } = calcFee(rules, station, deliverPlace);
 
     const order = await Order.create({
       orderNo: generateOrderNo(),
+      campus: user.campus,
       station: String(station).slice(0, 50),
       pickupCode: String(pickupCode).slice(0, 50),
       deliverPlace: String(deliverPlace).slice(0, 100),
@@ -68,10 +74,14 @@ module.exports = (ctx) => {
     return res.json({ code: 0, data: list });
   });
 
-  /** 接单大厅（已支付待接单；取件码全脱敏） */
+  /** 接单大厅（已支付待接单；取件码全脱敏；【校区隔离】仅本校区订单） */
   router.get('/hall', auth, async (req, res) => {
+    const user = await User.findByPk(req.user.id);
+    if (!user || !user.campus) {
+      return res.status(400).json({ code: 400, message: '请先选择所在校区' });
+    }
     let list = await Order.findAll({
-      where: { status: 'PAID' },
+      where: { status: 'PAID', campus: user.campus },
       order: [['id', 'ASC']],
     });
     // 大厅展示：取件码打码，不暴露联系电话

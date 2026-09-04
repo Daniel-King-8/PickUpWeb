@@ -5,9 +5,9 @@
     <van-empty v-if="!loading && list.length === 0" description="还没有接单记录" />
 
     <div class="list">
-      <div v-for="o in list" :key="o.id" class="card" @click="$router.push(`/orders/${o.id}`)">
+      <div v-for="o in list" :key="o.id" class="card" :class="isDone(o.status) ? 'card--done' : ''" @click="$router.push(`/orders/${o.id}`)">
         <div class="card-top">
-          <span class="status">{{ statusText(o.status) }}</span>
+          <span class="status" :class="isDone(o.status) ? 'status--done' : ''">{{ statusText(o.status) }}</span>
           <b class="reward">￥{{ o.reward.toFixed(2) }}</b>
         </div>
         <div class="line">{{ o.station }} · 送至 {{ o.deliverPlace }}</div>
@@ -35,6 +35,11 @@ const STATUS_TEXT = {
   CANCELED: '已取消',
 };
 const statusText = (s) => STATUS_TEXT[s] || s;
+
+/** 已完成/已结算（显示灰色） */
+function isDone(s) {
+  return s === 'CONFIRMED' || s === 'SETTLED';
+}
 
 async function load() {
   loading.value = true;
@@ -75,6 +80,14 @@ load();
   border-radius: 12px;
   background: #fff3e6;
   color: #fa550f;
+}
+/* 已完成/已结算：整卡变灰 */
+.status--done {
+  background: #eee;
+  color: #9aa0a6;
+}
+.card--done {
+  opacity: 0.72;
 }
 .reward {
   color: #fa550f;

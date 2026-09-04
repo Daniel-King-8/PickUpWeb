@@ -1,31 +1,41 @@
 /**
  * 前端路由：
- * - 雇主端：登录 / 下单 / 我的订单 / 订单详情 / 待支付
- * - 跑腿员端：接单大厅 / 我的跑单（同订单详情）
- * - 管理后台：核对 / 结算 / 设置（isAdmin 守卫）
+ * - 底部导航四页：/ 接单大厅、/publish 发布悬赏、/run 已接悬赏、/me 我的
+ * - 辅助页：/campus 首次选择校区、/orders/mine 我发布的订单、/orders/:id 详情、/pay/:id 待支付
+ * - 管理后台：/admin
  */
 import { createRouter, createWebHistory } from 'vue-router';
-import { isLoggedIn, isAdmin } from './store';
+import { isLoggedIn, getUser } from './store';
 
 const router = createRouter({
   history: createWebHistory(),
   routes: [
     { path: '/login', name: 'login', component: () => import('./views/LoginView.vue') },
-    { path: '/', name: 'home', component: () => import('./views/HomeView.vue'), meta: { auth: true } },
+    { path: '/campus', name: 'campus', component: () => import('./views/CampusView.vue'), meta: { auth: true } },
+    { path: '/', name: 'hall', component: () => import('./views/HallView.vue'), meta: { auth: true } },
+    { path: '/publish', name: 'publish', component: () => import('./views/HomeView.vue'), meta: { auth: true } },
+    { path: '/run', name: 'run', component: () => import('./views/RunMineView.vue'), meta: { auth: true } },
+    { path: '/me', name: 'me', component: () => import('./views/MyView.vue'), meta: { auth: true } },
     { path: '/orders/mine', name: 'myOrders', component: () => import('./views/MyOrdersView.vue'), meta: { auth: true } },
     { path: '/orders/:id', name: 'orderDetail', component: () => import('./views/OrderDetailView.vue'), meta: { auth: true } },
     { path: '/pay/:id', name: 'pay', component: () => import('./views/PayView.vue'), meta: { auth: true } },
-    { path: '/hall', name: 'hall', component: () => import('./views/HallView.vue'), meta: { auth: true } },
-    { path: '/run/mine', name: 'runMine', component: () => import('./views/RunMineView.vue'), meta: { auth: true } },
     { path: '/admin', name: 'admin', component: () => import('./views/admin/AdminView.vue'), meta: { auth: true, admin: true } },
     { path: '/:pathMatch(.*)*', redirect: '/login' },
   ],
 });
 
-// 守卫：未登录跳登录页；admin 路由拦截
+// 守卫1：未登录 → 登录页
+// 守卫2：已登录但未选校区（除 admin）→ 校区选择页
 router.beforeEach((to) => {
   if (to.meta && to.meta.auth && !isLoggedIn()) return { path: '/login' };
-  if (to.meta && to.meta.admin && !isAdmin()) return { path: '/' };
+  if (to.meta && to.meta.admin && getUser() && getUser().role !== 'admin') return { path: '/' };
+  const user = getUser();
+  if (
+    to.meta && to.meta.auth && user &&
+    user.role !== 'admin' && !user.campus && to.path !== '/campus'
+  ) {
+    return { path: '/campus' };
+  }
   return true;
 });
 

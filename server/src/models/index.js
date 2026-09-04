@@ -18,6 +18,7 @@ const User = db.define(
     password: { type: DataTypes.STRING(255), allowNull: false }, // bcrypt 哈希
     phone: { type: DataTypes.STRING(20), defaultValue: '' },
     role: { type: DataTypes.ENUM('user', 'admin'), defaultValue: 'user' },
+    campus: { type: DataTypes.STRING(20), defaultValue: '' }, // 校区 id（scyz/cdny），首次登录选择
   },
   { tableName: 'users' }
 );
@@ -28,6 +29,7 @@ const Order = db.define(
   {
     id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
     orderNo: { type: DataTypes.STRING(32), unique: true, allowNull: false },
+    campus: { type: DataTypes.STRING(20), defaultValue: '' }, // 订单所属校区（服务端从用户档案继承）
     station: { type: DataTypes.STRING(50), allowNull: false }, // 取件驿站
     pickupCode: { type: DataTypes.STRING(50), allowNull: false }, // 取件码
     deliverPlace: { type: DataTypes.STRING(100), allowNull: false }, // 送达地址

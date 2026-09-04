@@ -155,12 +155,8 @@ async function load() {
 }
 
 function goBack() {
-  // 大厅来的回大厅，其他回我的订单
-  if (router.options.state && router.options.state.back === '/hall') {
-    router.push('/hall');
-  } else {
-    router.push('/orders/mine');
-  }
+  // 浏览器后退：从大厅/已接悬赏/我的订单进入都能正确返回
+  router.back();
 }
 
 async function copyCode() {

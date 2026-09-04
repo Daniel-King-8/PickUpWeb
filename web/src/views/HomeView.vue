@@ -191,7 +191,7 @@ async function onSubmit() {
 .home-page {
   min-height: 100vh;
   background: #f7f8fa;
-  padding-bottom: 40px;
+  padding-bottom: 92px; /* 底部 tabbar 高度，防遮挡 */
 }
 .tips {
   margin: 16px;
