@@ -57,9 +57,11 @@ module.exports = (ctx) => {
    * - status：按状态
    * - orderNo：按订单号精确查询
    * - uid：按用户ID查询其发布的全部订单
+   * - q：综合查询（KD 单号 / 雇主姓名、ID、电话模糊匹配）
    */
   router.get('/orders', async (req, res) => {
-    const { status = '', orderNo = '', uid = '' } = req.query;
+    const { Op } = require('sequelize');
+    const { status = '', orderNo = '', uid = '', q = '' } = req.query;
     const where = {};
     if (status) where.status = status;
     if (orderNo) {
@@ -70,8 +72,28 @@ module.exports = (ctx) => {
       if (!u) return res.json({ code: 0, data: [] }); // 无此用户 ID → 空列表
       where.publisherId = u.id;
     }
+    if (q) {
+      const s = String(q).trim();
+      if (/^kd/i.test(s)) {
+        // KD 开头视为单号
+        where.orderNo = s;
+      } else {
+        // 否则按雇主姓名/ID/电话模糊匹配
+        const users = await User.findAll({
+          where: {
+            [Op.or]: [
+              { username: { [Op.like]: `%${s}%` } },
+              { uid: s },
+              { phone: s },
+            ],
+          },
+        });
+        if (users.length === 0) return res.json({ code: 0, data: [] });
+        where.publisherId = { [Op.in]: users.map((u) => u.id) };
+      }
+    }
     const list = await Order.findAll({ where, order: [['id', 'DESC']], limit: 200 });
-    // 附用户信息（雇主/跑腿员姓名与 10 位用户ID）
+    // 附用户信息（雇主/跑腿员姓名、10 位用户ID、联系电话）
     const umap = await userMapByIds(list.flatMap((o) => [o.publisherId, o.runnerId]));
     return res.json({
       code: 0,
@@ -79,8 +101,10 @@ module.exports = (ctx) => {
         ...o.toJSON(),
         publisherName: umap[o.publisherId] ? umap[o.publisherId].username : '',
         publisherUid: umap[o.publisherId] ? umap[o.publisherId].uid : String(o.publisherId || ''),
+        publisherPhone: umap[o.publisherId] ? umap[o.publisherId].phone : '',
         runnerName: umap[o.runnerId] ? umap[o.runnerId].username : '',
         runnerUid: umap[o.runnerId] ? umap[o.runnerId].uid : String(o.runnerId || ''),
+        runnerPhone: umap[o.runnerId] ? umap[o.runnerId].phone : '',
       })),
     });
   });

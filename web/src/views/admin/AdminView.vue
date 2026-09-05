@@ -16,13 +16,29 @@
 
     <!-- 待核对：PAYING 订单，查看截图 → 标记已支付 -->
     <div v-if="tab === 'check'" class="section">
+      <!-- 查询：单号 / 雇主信息 -->
+      <van-cell-group inset class="order-fitler-wrap">
+        <div class="search-row">
+          <van-field v-model="checkSearch" placeholder="查询：单号 / 雇主的姓名、用户ID、电话" clearable />
+          <van-button size="small" round type="primary" @click="loadPaying">搜索</van-button>
+          <van-button size="small" round plain @click="resetCheck">重置</van-button>
+        </div>
+      </van-cell-group>
+
       <van-empty v-if="payingList.length === 0" description="没有待核对订单" />
       <div v-for="o in payingList" :key="o.id" class="card">
         <div class="card-top">
           <b>￥{{ o.reward.toFixed(2) }}</b>
           <span class="muted">{{ o.station }} · {{ o.deliverPlace }}</span>
         </div>
-        <div class="card-line">单号 {{ o.orderNo }} · 取件码 {{ o.pickupCode }}</div>
+        <div class="card-line">单号
+          <span class="copyable copyable--inline" @click="copyText(o.orderNo, '订单号')">{{ o.orderNo }}</span>
+          · 取件码 {{ o.pickupCode }}
+        </div>
+        <div class="card-line muted">雇主 {{ o.publisherName }}（ID
+          <span class="copyable copyable--inline" @click="copyText(o.publisherUid, '用户ID')">{{ o.publisherUid }}</span>）
+          · {{ o.publisherPhone || '未留电话' }} · {{ campusName(o.campus) }}
+        </div>
         <div class="card-actions">
           <van-button size="small" plain round @click="viewScreenshot(o)">看付款截图</van-button>
           <van-button size="small" plain round @click="markPaid(o)">标记已支付</van-button>
@@ -284,9 +300,16 @@ const tab = ref('check');
 
 /* ---------- 待核对 ---------- */
 const payingList = ref([]);
+const checkSearch = ref('');
 async function loadPaying() {
-  const res = await api.get('/admin/orders', { params: { status: 'PAYING' } });
+  const res = await api.get('/admin/orders', {
+    params: { status: 'PAYING', q: checkSearch.value || undefined },
+  });
   payingList.value = res.data;
+}
+function resetCheck() {
+  checkSearch.value = '';
+  loadPaying();
 }
 function viewScreenshot(o) {
   if (!o.payerScreenshot) return showToast('该订单未上传截图');
