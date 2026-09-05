@@ -11,6 +11,6 @@ import AppTabbar from './components/AppTabbar.vue';
 import './style.css';
 
 const route = useRoute();
-const TAB_PAGES = ['/', '/publish', '/run', '/me'];
+const TAB_PAGES = ['/', '/publish', '/run', '/orders/mine', '/me'];
 const showTabbar = computed(() => TAB_PAGES.includes(route.path));
 </script>

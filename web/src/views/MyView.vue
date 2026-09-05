@@ -164,11 +164,9 @@ async function onApplyHunter() {
   }
 }
 
-/** 关于：复制博客链接 */
+/** 关于：直接跳转博客（新标签页） */
 function onAbout() {
-  const url = 'https://blog.king818.xyz/archives/qujian';
-  navigator.clipboard.writeText(url);
-  showToast('链接已复制，请在浏览器打开');
+  window.open('https://blog.king818.xyz/archives/qujian', '_blank');
 }
 
 /** 联系作者：复制 QQ */

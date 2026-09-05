@@ -1,6 +1,6 @@
 <template>
   <div class="page">
-    <van-nav-bar title="我发布的订单" left-arrow @click-left="$router.push('/')" />
+    <van-nav-bar title="已发布的悬赏" />
     <van-tabs v-model:active="activeTab" sticky @change="load">
       <van-tab title="全部" name=""></van-tab>
       <van-tab title="待支付" name="PAYING"></van-tab>
@@ -93,7 +93,7 @@ load();
 .page {
   min-height: 100vh;
   background: var(--bg-page);
-  padding-bottom: 48px;
+  padding-bottom: 92px; /* 底部 tabbar（5 项）防遮挡 */
 }
 .list {
   padding: 12px 14px;
