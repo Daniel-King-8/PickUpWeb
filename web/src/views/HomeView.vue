@@ -69,6 +69,7 @@
             <van-icon name="gold-coin-o" class="field-icon" />
           </template>
         </van-field>
+        <div class="reward-tip">💡 悬赏金额越高，接单越快</div>
 
         <van-field
           v-model="form.destination"
@@ -249,10 +250,7 @@ onMounted(async () => {
   // 按当前用户校区拉费率规则（各校独立配置）
   const res = await api.get('/public/fee-rules', { params: { campus: CAMPUS } });
   rules.value = res.data;
-  // 悬赏金额默认填最低值（1+平台费），雇主可自行上调
-  if (!form.reward) {
-    form.reward = Number((minReward.value).toFixed(2));
-  }
+  // 悬赏金额留空，由雇主自己填写（最低值见输入提示/费用框）
   // 上次填写的信息自动填入（目的地/房间号分开存）
   form.destination = localStorage.getItem('lastDestination') || '';
   form.roomNo = localStorage.getItem('lastRoomNo') || '';
@@ -385,6 +383,11 @@ async function onSubmit() {
 }
 
 /* 悬赏费说明卡 */
+.reward-tip {
+  margin: 0 16px 10px;
+  font-size: 12px;
+  color: var(--text-secondary, #64748b);
+}
 .fee-box {
   margin: 10px 16px;
   padding: 12px 14px;
