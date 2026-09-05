@@ -1,40 +1,62 @@
 <template>
   <div class="home-page">
     <van-nav-bar title="发布取件需求" />
-    <div class="tips">
-      填写快递信息，系统自动计算跑腿费。提交后扫码或加微信付款，管理员确认后即刻发布。
+
+    <!-- 顶部说明卡片 -->
+    <div class="tips-card">
+      <div class="tips-icon">📦</div>
+      <div class="tips-text">
+        <div class="tips-title">发布校园代取需求</div>
+        <div class="tips-desc">填写快递信息，系统自动核算跑腿费。提交后扫码或加微信付款，管理员确认后即刻发布接单大厅。</div>
+      </div>
     </div>
 
-    <!-- 红色提示：付款前先加管理员 -->
+    <!-- 付款提示：付款前先加管理员 -->
     <div class="pay-warn" v-if="contactWechat">
-      ⚠️ 提交订单后请添加管理员({{ contactWechat }})进行付款
+      <div class="warn-icon">💡</div>
+      <div class="warn-content">
+        <b>温馨提示：</b>提交订单后请添加管理员微信（<span class="copyable copyable--inline" @click="copyContact">{{ contactWechat }}</span>）进行付款与核对
+      </div>
     </div>
 
     <van-form class="form">
-      <van-cell-group inset title="取件信息">
+      <van-cell-group inset title="取件与送达信息">
         <van-field
           v-model="form.station"
           is-link
           readonly
           label="取件驿站"
-          placeholder="请选择驿站"
+          placeholder="点击选择驿站"
           @click="showStation = true"
-        />
+        >
+          <template #left-icon>
+            <van-icon name="location-o" class="field-icon" />
+          </template>
+        </van-field>
+
         <van-field
           v-model="form.pickupCode"
           label="取件码"
-          placeholder="快递短信中的取件码"
+          placeholder="如：5-2-3021 / 短信取件码"
           maxlength="50"
-        />
+        >
+          <template #left-icon>
+            <van-icon name="qr" class="field-icon" />
+          </template>
+        </van-field>
+
+        <!-- 费用明细展示卡 -->
         <div class="fee-box" v-if="feeDetail">
-          <div class="fee-main">
-            <span>最低悬赏</span>
-            <b class="fee-num">最低 ￥{{ minReward.toFixed(2) }}</b>
+          <div class="fee-header">
+            <span class="fee-title">最低悬赏金额</span>
+            <div class="fee-badge">最低 ￥{{ minReward.toFixed(2) }}</div>
           </div>
           <div class="fee-detail">
-            {{ feeDetail.detail }} · 雇主可自行提高悬赏金额
+            <span>{{ feeDetail.detail }}</span>
+            <span class="fee-tip">· 雇主可自行上调金额以加速接单</span>
           </div>
         </div>
+
         <van-field
           v-model="form.reward"
           type="digits"
@@ -42,35 +64,58 @@
           :placeholder="`最低 ${minReward.toFixed(2)} 元`"
           maxlength="6"
           :error-message="rewardError"
-        />
+        >
+          <template #left-icon>
+            <van-icon name="gold-coin-o" class="field-icon" />
+          </template>
+        </van-field>
 
         <van-field
           v-model="form.destination"
           label="目的地"
-          placeholder="请选择目的地"
+          placeholder="点击选择宿舍楼/片区"
           is-link
           readonly
           @click="showTower = true"
-        />
+        >
+          <template #left-icon>
+            <van-icon name="hotel-o" class="field-icon" />
+          </template>
+        </van-field>
+
         <van-field
           v-model="form.roomNo"
           label="房间号"
-          placeholder="如 302（选填）"
+          placeholder="如 302 / A栋（选填）"
           maxlength="10"
-        />
+        >
+          <template #left-icon>
+            <van-icon name="wap-home-o" class="field-icon" />
+          </template>
+        </van-field>
+
         <van-field
           v-model="form.contactPhone"
           type="tel"
           label="联系电话"
-          placeholder="跑腿员联系你用，接单时可拨"
+          placeholder="跑腿员接单后联系使用"
           maxlength="11"
-        />
+        >
+          <template #left-icon>
+            <van-icon name="phone-o" class="field-icon" />
+          </template>
+        </van-field>
+
         <van-field
           v-model="form.remark"
-          label="备注"
-          placeholder="选填：包裹大小、件数等"
+          label="备注信息"
+          placeholder="选填：大件/重件/需轻放等"
           maxlength="100"
-        />
+        >
+          <template #left-icon>
+            <van-icon name="notes-o" class="field-icon" />
+          </template>
+        </van-field>
       </van-cell-group>
 
       <div class="submit-area">
@@ -78,33 +123,40 @@
           type="primary"
           block
           round
+          size="large"
+          class="submit-btn"
           :loading="submitting"
           :disabled="!!rewardError"
           @click="onSubmit"
         >
-          提交订单（￥{{ submitAmount }}）
+          立即提交订单 · ￥{{ submitAmount }}
         </van-button>
-        <div class="my-orders-link" @click="$router.push('/orders/mine')">我的订单 →</div>
+        <div class="my-orders-link" @click="$router.push('/orders/mine')">
+          <span>查看我发布的历史订单</span>
+          <van-icon name="arrow" />
+        </div>
       </div>
     </van-form>
 
-    <!-- 驿站选择：点击式列表（适配桌面鼠标，手机同样好用） -->
+    <!-- 驿站选择：点击式列表 -->
     <van-action-sheet
       v-model:show="showStation"
       :actions="stationActions"
       title="选择取件驿站"
       cancel-text="取消"
       close-on-click-action
+      round
       @select="onPickStation"
     />
 
-    <!-- 目的地选择：点击列表（可滚轮滚动） -->
+    <!-- 目的地选择：点击列表 -->
     <van-action-sheet
       v-model:show="showTower"
       :actions="destinationActions"
-      title="选择目的地"
+      title="选择送达目的地"
       cancel-text="取消"
       close-on-click-action
+      round
       @select="onPickDestination"
     />
   </div>
@@ -116,6 +168,7 @@ import { useRouter } from 'vue-router';
 import { showToast } from 'vant';
 import api from '../api';
 import { getUser } from '../store';
+import { copyText } from '../utils/copy';
 
 const router = useRouter();
 const rules = ref(null); // 费率规则
@@ -180,6 +233,12 @@ const submitAmount = computed(() => {
 
 const user = getUser();
 const CAMPUS = user && user.campus;
+
+function copyContact() {
+  if (contactWechat.value) {
+    copyText(contactWechat.value, '管理员微信');
+  }
+}
 
 onMounted(async () => {
   // 普通用户看到首页即下单页；管理员进后台
@@ -257,61 +316,127 @@ async function onSubmit() {
 <style scoped>
 .home-page {
   min-height: 100vh;
-  background: #f7f8fa;
-  padding-bottom: 92px; /* 底部 tabbar 高度，防遮挡 */
+  background: var(--bg-page);
+  padding-bottom: 96px; /* 底部 tabbar 高度，防遮挡 */
 }
-.tips {
-  margin: 16px;
-  padding: 12px 16px;
-  border-radius: 8px;
-  background: #f0faf5;
-  color: #00885c;
-  font-size: 13px;
+
+/* 顶部引导小贴士 */
+.tips-card {
+  margin: 12px 14px;
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: #ffffff;
+  box-shadow: var(--shadow-sm);
+  border: 1px solid var(--border-light);
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
 }
+.tips-icon {
+  font-size: 24px;
+  flex-shrink: 0;
+  padding-top: 2px;
+}
+.tips-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #0f172a;
+}
+.tips-desc {
+  margin-top: 4px;
+  font-size: 12px;
+  color: #64748b;
+  line-height: 1.5;
+}
+
+/* 付款警告条 */
 .pay-warn {
-  margin: 0 16px 12px;
-  padding: 12px 16px;
-  border-radius: 8px;
-  background: #fff2f0;
-  color: #fa3534;
+  margin: 0 14px 12px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+  color: #c2410c;
   font-size: 13px;
-  font-weight: 500;
+  line-height: 1.5;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+.warn-icon {
+  font-size: 16px;
+  flex-shrink: 0;
+}
+.warn-content {
+  flex: 1;
 }
 .pay-warn:empty {
   display: none;
 }
+
+.field-icon {
+  color: #059669;
+  font-size: 17px;
+  margin-right: 6px;
+}
+
 .form {
-  margin-top: 8px;
+  margin-top: 4px;
 }
+
+/* 悬赏费说明卡 */
 .fee-box {
-  margin: 8px 14px 16px;
-  padding: 12px 16px;
-  border-radius: 8px;
-  background: #fff8f0;
-  border: 1px solid #ffe6cc;
+  margin: 10px 16px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
+  border: 1px solid #bbf7d0;
 }
-.fee-main {
+.fee-header {
   display: flex;
   justify-content: space-between;
-  font-size: 15px;
-  color: #333;
+  align-items: center;
 }
-.fee-num {
-  color: #fa550f;
-  font-size: 18px;
+.fee-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #166534;
+}
+.fee-badge {
+  font-size: 15px;
+  font-weight: 700;
+  color: #059669;
 }
 .fee-detail {
   margin-top: 4px;
   font-size: 12px;
-  color: #8a8a8a;
+  color: #15803d;
+  display: flex;
+  flex-wrap: wrap;
 }
+.fee-tip {
+  color: #166534;
+  opacity: 0.85;
+}
+
 .submit-area {
-  margin: 32px;
+  margin: 28px 16px;
+}
+.submit-btn {
+  font-size: 16px !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.5px;
 }
 .my-orders-link {
   margin-top: 16px;
-  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
   font-size: 14px;
-  color: #00a870;
+  font-weight: 500;
+  color: var(--van-primary-color);
+  cursor: pointer;
+  padding: 8px;
 }
 </style>

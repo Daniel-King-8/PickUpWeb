@@ -1,30 +1,207 @@
-/* 全局基础样式 + Vant 主题色（清新绿） */
+/* ==========================================================================
+   校园快递代取 - 全局设计系统与主题定制
+   ========================================================================== */
+
 :root {
-  --van-primary-color: #00a870;
-  --van-success-color: #00a870;
+  /* 品牌核心色系 (清新薄荷绿 / 活力校园风) */
+  --van-primary-color: #059669;
+  --van-primary-color-dark: #047857;
+  --van-primary-color-light: #ecfdf5;
+  --van-success-color: #10b981;
+  --van-danger-color: #f43f5e;
+  --van-warning-color: #f59e0b;
+
+  /* 中性背景与卡片系统 */
+  --bg-page: #f8fafc;
+  --bg-card: #ffffff;
+  --bg-subtle: #f1f5f9;
+
+  /* 文字层级颜色 */
+  --text-main: #0f172a;
+  --text-regular: #334155;
+  --text-secondary: #64748b;
+  --text-muted: #94a3b8;
+  --text-link: #059669;
+
+  /* 边框与阴影 */
+  --border-light: rgba(226, 232, 240, 0.8);
+  --border-focus: #10b981;
+  --shadow-sm: 0 1px 3px rgba(15, 23, 42, 0.04), 0 1px 2px rgba(15, 23, 42, 0.02);
+  --shadow-card: 0 4px 20px -2px rgba(15, 23, 42, 0.05), 0 2px 6px -1px rgba(15, 23, 42, 0.03);
+  --shadow-hover: 0 10px 25px -3px rgba(15, 23, 42, 0.08), 0 4px 10px -2px rgba(15, 23, 42, 0.04);
+  --shadow-glow: 0 10px 25px -4px rgba(5, 150, 105, 0.35);
+
+  /* Vant 组件覆盖优化 */
+  --van-nav-bar-background: rgba(255, 255, 255, 0.88);
+  --van-nav-bar-title-text-color: #0f172a;
+  --van-nav-bar-title-font-size: 17px;
+  --van-nav-bar-icon-color: #334155;
+  --van-tabbar-background: rgba(255, 255, 255, 0.92);
+  --van-tabbar-item-active-color: #059669;
+  --van-tabbar-item-text-color: #64748b;
+  --van-cell-background: #ffffff;
+  --van-cell-group-inset-padding: 0 14px;
+  --van-cell-group-title-color: #64748b;
+  --van-cell-group-title-font-size: 13px;
+  --van-tabs-bottom-bar-color: #059669;
+  --van-tabs-bottom-bar-width: 24px;
+  --van-tabs-bottom-bar-height: 3px;
+  --van-tabs-line-height: 44px;
+  --van-button-default-background: #ffffff;
+  --van-button-default-border-color: #e2e8f0;
+  --van-button-default-color: #334155;
+}
+
+/* 基础重置 */
+*, *::before, *::after {
+  box-sizing: border-box;
 }
 
 html,
 body,
 #app {
-  height: 100%;
+  min-height: 100%;
   margin: 0;
-  background: #f7f8fa;
-  font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', 'PingFang SC',
+  padding: 0;
+  background: var(--bg-page);
+  color: var(--text-main);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'PingFang SC',
     'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-/* 可点击复制样式（用户ID/订单号等） */
+/* 全局滚动条美化 */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* 顶部毛玻璃导航条 */
+.van-nav-bar {
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid rgba(226, 232, 240, 0.6);
+}
+.van-nav-bar__title {
+  font-weight: 600 !important;
+}
+
+/* 底部毛玻璃导航栏 */
+.van-tabbar {
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-top: 1px solid rgba(226, 232, 240, 0.7);
+  box-shadow: 0 -4px 16px rgba(15, 23, 42, 0.03);
+}
+.van-tabbar-item {
+  font-weight: 500;
+  transition: transform 0.2s ease;
+}
+.van-tabbar-item--active {
+  font-weight: 600;
+}
+
+/* 按钮点击触感 */
+.van-button {
+  font-weight: 500;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.van-button:active {
+  transform: scale(0.98);
+}
+.van-button--primary {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%) !important;
+  border: none !important;
+  box-shadow: 0 4px 14px rgba(5, 150, 105, 0.28);
+}
+.van-button--primary:active {
+  box-shadow: 0 2px 6px rgba(5, 150, 105, 0.2);
+}
+.van-button--danger {
+  background: linear-gradient(135deg, #f43f5e 0%, #e11d48 100%) !important;
+  border: none !important;
+  box-shadow: 0 4px 14px rgba(244, 63, 94, 0.25);
+}
+
+/* 卡片分组基础 */
+.van-cell-group--inset {
+  border-radius: 14px !important;
+  box-shadow: var(--shadow-sm);
+  border: 1px solid var(--border-light);
+  overflow: hidden;
+}
+
+/* 复制小标签交互 */
 .copyable {
-  color: #00a870;
-  border-bottom: 1px dashed rgba(0, 168, 112, 0.5);
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  color: var(--van-primary-color);
+  background: var(--van-primary-color-light);
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 0.92em;
+  font-weight: 500;
   cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+.copyable:hover {
+  background: #d1fae5;
+  color: var(--van-primary-color-dark);
+}
+.copyable:active {
+  transform: scale(0.96);
+  opacity: 0.85;
 }
 .copyable--inline {
-  margin: 0 2px;
+  margin: 0 3px;
+  vertical-align: middle;
 }
 .copyable--light {
-  color: #fff;
-  border-bottom-color: rgba(255, 255, 255, 0.5);
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.2);
+}
+.copyable--light:hover {
+  background: rgba(255, 255, 255, 0.3);
+  color: #ffffff;
+}
+
+/* 状态徽章通用样式 */
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+}
+.status-badge--green {
+  background: #ecfdf5;
+  color: #059669;
+  border: 1px solid rgba(16, 185, 129, 0.2);
+}
+.status-badge--blue {
+  background: #eff6ff;
+  color: #2563eb;
+  border: 1px solid rgba(37, 99, 235, 0.2);
+}
+.status-badge--orange {
+  background: #fff7ed;
+  color: #ea580c;
+  border: 1px solid rgba(234, 88, 12, 0.2);
+}
+.status-badge--gray {
+  background: #f1f5f9;
+  color: #64748b;
+  border: 1px solid rgba(148, 163, 184, 0.2);
 }

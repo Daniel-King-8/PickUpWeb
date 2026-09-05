@@ -1,24 +1,58 @@
 <template>
   <div class="page" v-if="order">
-    <van-nav-bar :title="'订单详情'" left-arrow @click-left="goBack" />
+    <van-nav-bar title="订单详情" left-arrow @click-left="goBack" />
 
+    <!-- 订单状态顶部卡片 -->
     <div class="status-banner" :class="`status-banner--${order.status}`">
-      <div class="status-text">{{ statusText(order.status) }}</div>
-      <div class="status-reward">￥{{ order.reward.toFixed(2) }}</div>
+      <div class="status-icon-wrap">
+        <van-icon :name="statusIcon(order.status)" class="status-icon" />
+      </div>
+      <div class="status-info">
+        <div class="status-text">{{ statusText(order.status) }}</div>
+        <div class="status-sub">{{ statusSubText(order.status) }}</div>
+      </div>
+      <div class="status-reward">
+        <span class="unit">￥</span>
+        <span class="amount">{{ order.reward.toFixed(2) }}</span>
+      </div>
     </div>
 
-    <van-cell-group inset title="取件信息">
-      <van-cell title="取件驿站" :value="order.station" />
-      <van-cell title="取件码" :value="order.pickupCode" @click="order.pickupCode !== '******' && copyCode()">
-        <template v-if="order.pickupCode === '******'" #label>接单后才可查看</template>
+    <!-- 取件与配送信息 -->
+    <van-cell-group inset title="取件与送达信息">
+      <van-cell title="取件驿站" :value="order.station">
+        <template #icon><van-icon name="location-o" class="cell-icon" /></template>
       </van-cell>
-      <van-cell title="送达地址" :value="order.deliverPlace" />
-      <van-cell v-if="order.contactPhone" title="联系电话">
+
+      <van-cell title="取件码">
+        <template #icon><van-icon name="qr" class="cell-icon" /></template>
         <template #value>
-          <span class="copyable" @click.stop="copyText(order.contactPhone, '电话号码')">{{ order.contactPhone }}</span>
+          <span v-if="order.pickupCode !== '******'" class="code-badge copyable" @click="copyCode">
+            {{ order.pickupCode }}
+            <van-icon name="description" class="copy-icon" />
+          </span>
+          <span v-else class="code-locked">接单后解锁可见</span>
+        </template>
+        <template v-if="order.pickupCode === '******'" #label>
+          为保护雇主隐私，跑腿员抢单后自动显示
         </template>
       </van-cell>
-      <van-cell v-if="order.remark" title="备注" :value="order.remark" />
+
+      <van-cell title="送达地址" :value="order.deliverPlace">
+        <template #icon><van-icon name="hotel-o" class="cell-icon" /></template>
+      </van-cell>
+
+      <van-cell v-if="order.contactPhone" title="联系电话">
+        <template #icon><van-icon name="phone-o" class="cell-icon" /></template>
+        <template #value>
+          <span class="copyable" @click.stop="copyText(order.contactPhone, '电话号码')">
+            {{ order.contactPhone }}
+          </span>
+        </template>
+      </van-cell>
+
+      <van-cell v-if="order.remark" title="备注信息" :value="order.remark">
+        <template #icon><van-icon name="notes-o" class="cell-icon" /></template>
+      </van-cell>
     </van-cell-group>
 
     <!-- 付款截图（待支付时上传） -->
@@ -31,13 +65,17 @@
             width="96"
             height="96"
             fit="cover"
+            radius="8px"
           />
           <div v-else class="upload-placeholder">
-            <span>＋</span>
-            <small>上传付款截图</small>
+            <van-icon name="plus" />
+            <small>上传截图</small>
           </div>
         </div>
-        <div class="upload-tip">扫码或加微信付款后上传截图，管理员核对后会收到通知</div>
+        <div class="upload-tip">
+          <b>转账后请上传截图</b>
+          <span>管理员核对收款记录后将立即发布至接单大厅</span>
+        </div>
       </div>
     </van-cell-group>
 
@@ -46,8 +84,9 @@
       <van-cell title="送达照片" :value="order.deliveryPhoto" />
     </van-cell-group>
 
-    <van-cell-group inset title="订单信息">
-      <van-cell title="订单号">
+    <!-- 订单详细参数卡 -->
+    <van-cell-group inset title="订单详情">
+      <van-cell title="订单编号">
         <template #value>
           <span class="copyable" @click.stop="copyText(order.orderNo, '订单号')">{{ order.orderNo }}</span>
         </template>
@@ -62,13 +101,14 @@
           {{ order.runnerName }}（<span class="copyable" @click.stop="copyText(order.runnerUid, '用户ID')">{{ order.runnerUid }}</span>）
         </template>
       </van-cell>
-      <van-cell title="跑腿费" :value="`￥${order.reward.toFixed(2)}`" />
+      <van-cell title="跑腿悬赏费" :value="`￥${order.reward.toFixed(2)}`" />
       <van-cell title="平台服务费" :value="`￥${order.fee.toFixed(2)}`" />
       <van-cell v-if="order.acceptedAt" title="接单时间" :value="fmt(order.acceptedAt)" />
       <van-cell v-if="order.deliveredAt" title="送达时间" :value="fmt(order.deliveredAt)" />
       <van-cell v-if="order.confirmedAt" title="确认时间" :value="fmt(order.confirmedAt)" />
     </van-cell-group>
 
+    <!-- 操作按钮区 -->
     <div class="actions">
       <!-- 雇主：待支付 → 去付款 -->
       <van-button
@@ -76,10 +116,12 @@
         type="primary"
         block
         round
+        size="large"
         @click="$router.push(`/pay/${order.id}`)"
       >
-        去付款
+        去付款 / 上传凭证
       </van-button>
+
       <!-- 雇主：待接单/待确认 可取消 -->
       <van-button
         v-if="isPublisher && ['PAYING', 'PAID'].includes(order.status)"
@@ -90,35 +132,42 @@
       >
         取消订单
       </van-button>
+
       <!-- 雇主：确认收货 -->
       <van-button
         v-if="isPublisher && order.status === 'DELIVERED'"
         type="primary"
         block
         round
+        size="large"
         @click="onConfirm"
       >
-        确认收货
+        确认已收到快递
       </van-button>
+
       <!-- 跑腿员：送达按钮（无需上传照片） -->
       <van-button
         v-if="isRunner && order.status === 'ACCEPTED'"
         type="primary"
         block
         round
+        size="large"
         @click="onDeliver"
       >
-        我已送达
+        我已送达 · 提请雇主确认
       </van-button>
+
       <!-- 大厅可见 → 抢单（仅赏金猎人可接） -->
       <van-button
         v-if="order.status === 'PAID' && !isPublisher && !isRunner"
         type="danger"
         block
         round
+        size="large"
+        class="accept-btn"
         @click="onAccept"
       >
-        {{ user.isHunter ? `抢单（赚 ￥${order.reward.toFixed(2)}）` : '成为赏金猎人后接单' }}
+        {{ user.isHunter ? `立即抢单（赚 ￥${order.reward.toFixed(2)}）` : '申请成为赏金猎人接单' }}
       </van-button>
     </div>
   </div>
@@ -127,7 +176,7 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { showToast, showConfirmDialog, showImagePreview } from 'vant';
+import { showToast, showConfirmDialog } from 'vant';
 import api from '../api';
 import { getUser, setAuth } from '../store';
 import { copyText } from '../utils/copy';
@@ -166,12 +215,38 @@ const STATUS_TEXT = {
   PAYING: '待支付',
   PAID: '待接单',
   ACCEPTED: '已接单',
-  DELIVERED: '待确认',
+  DELIVERED: '待雇主确认',
   CONFIRMED: '已完成',
   SETTLED: '已结算',
   CANCELED: '已取消',
 };
 const statusText = (s) => STATUS_TEXT[s] || s;
+
+function statusSubText(s) {
+  const map = {
+    PAYING: '请扫码或加微信转账，管理员核对后发布',
+    PAID: '等待校园跑腿员接单中…',
+    ACCEPTED: '跑腿员正在取件/配送中',
+    DELIVERED: '快递已送达指定地点，请雇主核验',
+    CONFIRMED: '订单交易完成，感谢互助',
+    SETTLED: '跑腿费已结算给接单跑腿员',
+    CANCELED: '订单已取消',
+  };
+  return map[s] || '';
+}
+
+function statusIcon(s) {
+  const map = {
+    PAYING: 'gold-coin-o',
+    PAID: 'clock-o',
+    ACCEPTED: 'logistics',
+    DELIVERED: 'passed',
+    CONFIRMED: 'checked',
+    SETTLED: 'balance-o',
+    CANCELED: 'clear',
+  };
+  return map[s] || 'info-o';
+}
 
 function fmt(t) {
   return t ? t.replace('T', ' ').slice(0, 16) : '';
@@ -246,74 +321,165 @@ async function onAccept() {
   showToast('抢单成功，请尽快去取件！');
   load();
 }
-
-// 加载入口：onMounted 中先刷新用户信息再加载订单（见上方 loadMe/load）
 </script>
 
 <style scoped>
 .page {
   min-height: 100vh;
-  background: #f7f8fa;
-  padding-bottom: 48px;
+  background: var(--bg-page);
+  padding-bottom: 56px;
 }
+
+/* 顶部状态大横幅 */
 .status-banner {
-  margin: 12px;
-  padding: 28px 0;
-  border-radius: 12px;
-  background: #00c48c;
+  margin: 12px 14px 16px;
+  padding: 22px 18px;
+  border-radius: 16px;
+  background: linear-gradient(135deg, #059669 0%, #10b981 100%);
   color: #fff;
-  text-align: center;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  box-shadow: 0 8px 24px rgba(5, 150, 105, 0.25);
+}
+.status-banner--ACCEPTED {
+  background: linear-gradient(135deg, #2563eb 0%, #3b82f6 100%);
+  box-shadow: 0 8px 24px rgba(37, 99, 235, 0.25);
+}
+.status-banner--DELIVERED {
+  background: linear-gradient(135deg, #d97706 0%, #f59e0b 100%);
+  box-shadow: 0 8px 24px rgba(217, 119, 6, 0.25);
 }
 .status-banner--CONFIRMED,
-.status-banner--SETTLED,
+.status-banner--SETTLED {
+  background: linear-gradient(135deg, #059669 0%, #34d399 100%);
+  box-shadow: 0 8px 24px rgba(5, 150, 105, 0.2);
+}
 .status-banner--CANCELED {
-  background: #9aa0a6;
+  background: linear-gradient(135deg, #64748b 0%, #94a3b8 100%);
+  box-shadow: 0 8px 24px rgba(100, 116, 139, 0.2);
+}
+.status-banner--PAYING {
+  background: linear-gradient(135deg, #ea580c 0%, #f97316 100%);
+  box-shadow: 0 8px 24px rgba(234, 88, 12, 0.25);
+}
+
+.status-icon-wrap {
+  width: 46px;
+  height: 46px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.22);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.status-icon {
+  font-size: 26px;
+}
+.status-info {
+  flex: 1;
 }
 .status-text {
-  font-size: 16px;
-  font-weight: 600;
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+.status-sub {
+  margin-top: 4px;
+  font-size: 12px;
+  opacity: 0.9;
+  line-height: 1.4;
 }
 .status-reward {
-  font-size: 34px;
-  font-weight: 700;
-  margin-top: 6px;
+  text-align: right;
+  flex-shrink: 0;
 }
+.status-reward .unit {
+  font-size: 14px;
+  font-weight: 600;
+}
+.status-reward .amount {
+  font-size: 26px;
+  font-weight: 800;
+}
+
+.cell-icon {
+  color: var(--van-primary-color);
+  font-size: 18px;
+  margin-right: 8px;
+}
+
+.code-badge {
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+.copy-icon {
+  font-size: 13px;
+  margin-left: 2px;
+}
+.code-locked {
+  color: #94a3b8;
+  font-size: 13px;
+}
+
 .upload-row {
   display: flex;
   align-items: center;
   padding: 16px;
+  gap: 16px;
 }
 .upload-preview {
   width: 96px;
   height: 96px;
-  border-radius: 8px;
+  border-radius: 10px;
   overflow: hidden;
   flex-shrink: 0;
+  cursor: pointer;
 }
 .upload-placeholder {
   width: 100%;
   height: 100%;
-  border: 1px dashed #ccc;
-  border-radius: 8px;
+  border: 2px dashed #cbd5e1;
+  border-radius: 10px;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  color: #999;
-  font-size: 24px;
+  color: #94a3b8;
+  font-size: 20px;
+  background: #f8fafc;
+  transition: all 0.2s;
+}
+.upload-placeholder:active {
+  background: #f1f5f9;
 }
 .upload-placeholder small {
+  margin-top: 4px;
   font-size: 11px;
 }
 .upload-tip {
-  margin-left: 16px;
   font-size: 12px;
-  color: #999;
+  color: #64748b;
+  line-height: 1.5;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
+.upload-tip b {
+  color: #0f172a;
+  font-size: 13px;
+}
+
 .actions {
-  margin: 32px 24px 0;
+  margin: 28px 16px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
-.actions .van-button + .van-button {
-  margin-top: 12px;
+.accept-btn {
+  font-size: 16px !important;
+  font-weight: 700 !important;
 }
 </style>

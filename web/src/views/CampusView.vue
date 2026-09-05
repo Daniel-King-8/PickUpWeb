@@ -1,19 +1,40 @@
 <template>
   <div class="campus-page">
     <div class="header">
-      <div class="logo">取</div>
+      <div class="logo">校</div>
       <div class="title">选择你所在的校区</div>
-      <div class="subtitle">你只能看到和接取本校区发布的悬赏</div>
+      <div class="subtitle">仅展示与匹配本校区的悬赏与代取任务</div>
     </div>
 
-    <div class="card" :class="{ active: selected === c.id }" v-for="c in campusList" :key="c.id" @click="selected = c.id">
-      <div class="card-name">{{ c.name }}</div>
-      <div class="card-desc">本校区的悬赏仅本校区同学可见可接</div>
-      <div class="check" v-if="selected === c.id">✓</div>
+    <div
+      class="card"
+      :class="{ active: selected === c.id }"
+      v-for="c in campusList"
+      :key="c.id"
+      @click="selected = c.id"
+    >
+      <div class="card-left">
+        <div class="campus-icon">🏫</div>
+        <div class="campus-info">
+          <div class="card-name">{{ c.name }}</div>
+          <div class="card-desc">本校区同学专属接发单通道</div>
+        </div>
+      </div>
+      <div class="check-box" :class="{ 'check-box--checked': selected === c.id }">
+        <van-icon v-if="selected === c.id" name="success" />
+      </div>
     </div>
 
-    <van-button type="primary" block round class="submit" :loading="loading" @click="onSubmit">
-      进入接单大厅
+    <van-button
+      type="primary"
+      block
+      round
+      size="large"
+      class="submit"
+      :loading="loading"
+      @click="onSubmit"
+    >
+      确认并进入接单大厅
     </van-button>
   </div>
 </template>
@@ -54,72 +75,98 @@ async function onSubmit() {
 <style scoped>
 .campus-page {
   min-height: 100vh;
-  background: linear-gradient(180deg, #e8f7f0 0%, #fff 55%);
-  padding: 90px 24px 40px;
+  background: linear-gradient(180deg, #ecfdf5 0%, #f8fafc 45%, #ffffff 100%);
+  padding: 70px 20px 40px;
   box-sizing: border-box;
 }
 .header {
   text-align: center;
-  margin-bottom: 44px;
+  margin-bottom: 36px;
 }
 .logo {
-  width: 64px;
-  height: 64px;
-  border-radius: 18px;
-  background: #00a870;
+  width: 68px;
+  height: 68px;
+  border-radius: 20px;
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
   color: #fff;
-  font-size: 30px;
-  font-weight: 700;
+  font-size: 32px;
+  font-weight: 800;
   display: flex;
   align-items: center;
   justify-content: center;
-  margin: 0 auto 14px;
-  box-shadow: 0 10px 26px rgba(0, 168, 112, 0.3);
+  margin: 0 auto 16px;
+  box-shadow: 0 10px 25px rgba(5, 150, 105, 0.3);
 }
 .title {
   font-size: 22px;
-  font-weight: 600;
-  color: #1a1a1a;
+  font-weight: 700;
+  color: #0f172a;
 }
 .subtitle {
   margin-top: 8px;
   font-size: 13px;
-  color: #8a8a8a;
+  color: #64748b;
 }
+
 .card {
-  position: relative;
-  padding: 22px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 20px;
   margin-bottom: 16px;
-  border-radius: 10px;
-  border: 1px solid #eee;
+  border-radius: 16px;
+  border: 2px solid #e2e8f0;
   background: #fff;
-  transition: all 0.2s;
+  box-shadow: var(--shadow-sm);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  cursor: pointer;
+}
+.card:active {
+  transform: scale(0.98);
 }
 .card.active {
-  border-color: #00a870;
-  background: #f0faf5;
-  box-shadow: 0 6px 18px rgba(0, 168, 112, 0.12);
+  border-color: #059669;
+  background: #f0fdf4;
+  box-shadow: 0 8px 24px rgba(5, 150, 105, 0.15);
+}
+.card-left {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.campus-icon {
+  font-size: 26px;
 }
 .card-name {
-  font-size: 17px;
-  font-weight: 600;
-  color: #1a1a1a;
+  font-size: 16px;
+  font-weight: 700;
+  color: #0f172a;
 }
 .card-desc {
-  margin-top: 6px;
+  margin-top: 4px;
   font-size: 12px;
-  color: #8a8a8a;
+  color: #64748b;
 }
-.check {
-  position: absolute;
-  top: 50%;
-  right: 18px;
-  transform: translateY(-50%);
-  color: #00a870;
-  font-size: 20px;
-  font-weight: 700;
+
+.check-box {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 2px solid #cbd5e1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 14px;
+  transition: all 0.2s ease;
 }
+.check-box--checked {
+  background: #059669;
+  border-color: #059669;
+}
+
 .submit {
-  margin-top: 32px;
+  margin-top: 36px;
+  font-weight: 600 !important;
 }
 </style>
