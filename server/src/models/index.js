@@ -18,6 +18,7 @@ const User = db.define(
     // 不加 unique 约束：SQLite 对已有表 ADD COLUMN 带唯一约束会失败）
     uid: { type: DataTypes.STRING(10), defaultValue: null },
     username: { type: DataTypes.STRING(50), unique: true, allowNull: false },
+    nickname: { type: DataTypes.STRING(50), defaultValue: '' }, // 昵称（用户可改，不影响登录账号）
     password: { type: DataTypes.STRING(255), allowNull: false }, // bcrypt 哈希
     phone: { type: DataTypes.STRING(20), defaultValue: '' },
     role: { type: DataTypes.ENUM('user', 'admin'), defaultValue: 'user' },

@@ -95,7 +95,8 @@ module.exports = (ctx) => {
     const users = await User.findAll({ where: { id: uniq } });
     const umap = {};
     users.forEach((u) => {
-      umap[u.id] = { uid: u.uid, username: u.username };
+      // 名称展示：昵称优先（用户改名后各处同步），登录账号 username 不受影响
+      umap[u.id] = { uid: u.uid, username: u.username, name: u.nickname || u.username };
     });
     return list.map((o) => {
       const p = umap[o.publisherId];
@@ -103,9 +104,9 @@ module.exports = (ctx) => {
       return {
         ...o.toJSON(),
         publisherUid: p ? p.uid : '',
-        publisherName: p ? p.username : '',
+        publisherName: p ? p.name : '',
         runnerUid: r ? r.uid : '',
-        runnerName: r ? r.username : '',
+        runnerName: r ? r.name : '',
       };
     });
   }

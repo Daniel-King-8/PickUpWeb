@@ -6,12 +6,13 @@
     <div class="user-card">
       <div class="user-main">
         <div class="avatar-wrap">
-          <div class="avatar">{{ (user.username || '同学')[0] }}</div>
+          <div class="avatar">{{ (user.nickname || user.username || '同')[0] }}</div>
           <div v-if="user.isHunter" class="hunter-badge" title="赏金猎人">🐺</div>
         </div>
         <div class="user-info">
           <div class="name-row">
-            <span class="name">{{ user.username || '同学' }}</span>
+            <span class="name">{{ user.nickname || user.username || '同学' }}</span>
+            <span class="edit-name" @click="openRename">✏️</span>
             <span v-if="user.role === 'admin'" class="role-tag">管理员</span>
           </div>
           <div class="uid">
@@ -95,6 +96,18 @@
     <div class="logout">
       <van-button block round plain type="danger" @click="onLogout">退出登录</van-button>
     </div>
+
+    <!-- 修改昵称弹窗 -->
+    <van-popup v-model:show="showRename" position="bottom" round>
+      <div class="edit-title">修改名称</div>
+      <van-cell-group inset>
+        <van-field v-model="newName" label="名称" placeholder="请输入名称" maxlength="50" clearable />
+      </van-cell-group>
+      <div class="rename-tip">⚠️ 修改名称不影响登录账号，登录时仍使用注册用户名</div>
+      <div class="edit-actions">
+        <van-button type="primary" block round @click="saveRename">保存</van-button>
+      </div>
+    </van-popup>
   </div>
 </template>
 
@@ -159,6 +172,31 @@ async function onApplyHunter() {
     user.value = me.data;
     stats.runCompleted = user.value.runCompleted ?? stats.runCompleted;
     showToast('申请成功，请等待管理员审核');
+  } catch (e) {
+    /* 拦截器已提示 */
+  }
+}
+
+/* ---------- 修改昵称（不影响登录账号） ---------- */
+const showRename = ref(false);
+const newName = ref('');
+
+function openRename() {
+  newName.value = user.value.nickname || user.value.username || '';
+  showRename.value = true;
+}
+
+async function saveRename() {
+  const name = newName.value.trim();
+  if (!name) return showToast('名称不能为空');
+  if (name.length > 50) return showToast('名称最长 50 字符');
+  try {
+    const res = await api.put('/users/profile', { nickname: name });
+    // 更新本地登录态与页面
+    setAuth(localStorage.getItem('token'), res.data);
+    user.value = res.data;
+    showRename.value = false;
+    showToast('名称已修改');
   } catch (e) {
     /* 拦截器已提示 */
   }
@@ -331,5 +369,30 @@ function onLogout() {
 
 .logout {
   margin: 28px 16px;
+}
+/* 姓名旁编辑图标 */
+.edit-name {
+  margin-left: 6px;
+  font-size: 14px;
+  cursor: pointer;
+  opacity: 0.85;
+}
+.edit-name:hover {
+  opacity: 1;
+}
+.edit-title {
+  padding: 20px 0 12px;
+  text-align: center;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-main, #0f172a);
+}
+.rename-tip {
+  margin: 10px 16px 4px;
+  font-size: 12px;
+  color: var(--text-secondary, #64748b);
+}
+.edit-actions {
+  padding: 16px;
 }
 </style>

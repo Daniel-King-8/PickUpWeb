@@ -13,14 +13,20 @@ const { Order, Setting, Settlement, User } = require('../models');
 const { uploadImage } = require('../middleware/upload');
 const { cnToday, generateUid } = require('../utils/helpers');
 
-/** 批量取用户信息并生成 { id -> {username, uid, phone} } map（结算展示用） */
+/** 批量取用户信息并生成 { id -> {name(nickname||username), uid, phone} } map */
 async function userMapByIds(ids) {
   const uniq = [...new Set(ids.filter(Boolean))];
   if (uniq.length === 0) return {};
   const users = await User.findAll({ where: { id: uniq } });
   const map = {};
   users.forEach((u) => {
-    map[u.id] = { username: u.username, uid: u.uid, phone: u.phone };
+    map[u.id] = {
+      name: u.nickname || u.username,
+      username: u.username,
+      nickname: u.nickname,
+      uid: u.uid,
+      phone: u.phone,
+    };
   });
   return map;
 }
@@ -36,6 +42,7 @@ function publicAdminUser(u) {
     id: u.id,
     uid: u.uid,
     username: u.username,
+    nickname: u.nickname || '',
     phone: u.phone,
     role: u.role,
     campus: u.campus,
@@ -99,10 +106,10 @@ module.exports = (ctx) => {
       code: 0,
       data: list.map((o) => ({
         ...o.toJSON(),
-        publisherName: umap[o.publisherId] ? umap[o.publisherId].username : '',
+        publisherName: umap[o.publisherId] ? umap[o.publisherId].name : '',
         publisherUid: umap[o.publisherId] ? umap[o.publisherId].uid : String(o.publisherId || ''),
         publisherPhone: umap[o.publisherId] ? umap[o.publisherId].phone : '',
-        runnerName: umap[o.runnerId] ? umap[o.runnerId].username : '',
+        runnerName: umap[o.runnerId] ? umap[o.runnerId].name : '',
         runnerUid: umap[o.runnerId] ? umap[o.runnerId].uid : String(o.runnerId || ''),
         runnerPhone: umap[o.runnerId] ? umap[o.runnerId].phone : '',
       })),
@@ -283,7 +290,7 @@ module.exports = (ctx) => {
         const u = umap[s.runnerId];
         return {
           ...s.toJSON(),
-          runnerName: u ? u.username : '用户已注销',
+          runnerName: u ? (u.nickname || u.username) : '用户已注销',
           runnerUid: u ? u.uid : String(s.runnerId),
           runnerPhone: u ? u.phone : '',
         };
@@ -335,7 +342,7 @@ module.exports = (ctx) => {
 
   router.get('/users', async (req, res) => {
     const list = await User.findAll({
-      attributes: ['id', 'uid', 'username', 'phone', 'role', 'campus', 'isHunter', 'hunterApplyAt', 'createdAt'],
+      attributes: ['id', 'uid', 'username', 'nickname', 'phone', 'role', 'campus', 'isHunter', 'hunterApplyAt', 'createdAt'],
       order: [['id', 'DESC']],
     });
     return res.json({ code: 0, data: list });
@@ -346,7 +353,7 @@ module.exports = (ctx) => {
     const { Op } = require('sequelize');
     const list = await User.findAll({
       where: { hunterApplyAt: { [Op.ne]: null } },
-      attributes: ['id', 'uid', 'username', 'phone', 'campus', 'hunterApplyAt'],
+      attributes: ['id', 'uid', 'username', 'nickname', 'phone', 'campus', 'hunterApplyAt'],
       order: [['hunterApplyAt', 'DESC']],
     });
     return res.json({ code: 0, data: list });

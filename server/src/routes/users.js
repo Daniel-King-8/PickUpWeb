@@ -20,6 +20,7 @@ module.exports = (ctx) => {
       id: u.id,
       uid: u.uid,
       username: u.username,
+      nickname: u.nickname || '',
       role: u.role,
       phone: u.phone,
       campus: u.campus,
@@ -84,6 +85,18 @@ module.exports = (ctx) => {
     const user = await User.findByPk(req.user.id);
     if (!user) return res.status(401).json({ code: 401, message: '用户不存在' });
     await user.update({ campus });
+    return res.json({ code: 0, data: publicUser(user) });
+  });
+
+  /** 修改昵称（不影响登录账号 username） */
+  router.put('/profile', auth, async (req, res) => {
+    const { nickname = '' } = req.body || {};
+    if (String(nickname).length > 50) {
+      return res.status(400).json({ code: 400, message: '昵称最长 50 字符' });
+    }
+    const user = await User.findByPk(req.user.id);
+    if (!user) return res.status(401).json({ code: 401, message: '用户不存在' });
+    await user.update({ nickname: String(nickname).trim() });
     return res.json({ code: 0, data: publicUser(user) });
   });
 
