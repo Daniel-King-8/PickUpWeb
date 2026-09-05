@@ -88,15 +88,22 @@ module.exports = (ctx) => {
     return res.json({ code: 0, data: publicUser(user) });
   });
 
-  /** 修改昵称（不影响登录账号 username） */
+  /**
+   * 修改名称（名称即登录账号：张三 → 李四，登录时须使用李四）
+   * 校验名称唯一（排除自己），成功后清空旧昵称避免展示残留
+   */
   router.put('/profile', auth, async (req, res) => {
-    const { nickname = '' } = req.body || {};
-    if (String(nickname).length > 50) {
-      return res.status(400).json({ code: 400, message: '昵称最长 50 字符' });
-    }
+    const { name = '' } = req.body || {};
+    const newName = String(name).trim();
+    if (!newName) return res.status(400).json({ code: 400, message: '名称不能为空' });
+    if (newName.length > 50) return res.status(400).json({ code: 400, message: '名称最长 50 字符' });
     const user = await User.findByPk(req.user.id);
     if (!user) return res.status(401).json({ code: 401, message: '用户不存在' });
-    await user.update({ nickname: String(nickname).trim() });
+    const exist = await User.findOne({ where: { username: newName } });
+    if (exist && exist.id !== user.id) {
+      return res.status(400).json({ code: 400, message: '该名称已被使用，请换一个' });
+    }
+    await user.update({ username: newName, nickname: '' });
     return res.json({ code: 0, data: publicUser(user) });
   });
 
