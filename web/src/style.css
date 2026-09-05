@@ -129,6 +129,11 @@ body,
   background: linear-gradient(135deg, #f43f5e 0%, #e11d48 100%) !important;
   border: none !important;
   box-shadow: 0 4px 14px rgba(244, 63, 94, 0.25);
+  /* 关键：danger 按钮文字/图标强制白色（Vant plain 模式会用粉色字，红底上不可见） */
+  color: #ffffff !important;
+}
+.van-button--danger .van-icon {
+  color: #ffffff !important;
 }
 
 /* 卡片分组基础 */

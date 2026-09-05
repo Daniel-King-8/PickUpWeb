@@ -27,7 +27,7 @@
         </div>
       </van-cell-group>
 
-      <van-empty v-if="payingList.length === 0" description="暂无待核对订单" image="orders-o" />
+      <van-empty v-if="payingList.length === 0" description="暂无待核对订单" />
       <div v-for="o in payingList" :key="o.id" class="card">
         <div class="card-top">
           <div class="reward-wrap">
@@ -135,7 +135,7 @@
 
       <!-- 预览结果 -->
       <div v-if="preview" class="preview-box">
-        <van-empty v-if="preview.groups.length === 0" description="该日暂无待结算完成订单" image="passed" />
+        <van-empty v-if="preview.groups.length === 0" description="该日暂无待结算完成订单" image="search" />
         <div v-for="g in preview.groups" :key="g.runnerId" class="card">
           <div class="card-top">
             <b>{{ g.runnerName }}（ID {{ g.runnerUid }}）· {{ g.count }} 单</b>
@@ -198,7 +198,7 @@
             placeholder="驿站名称，如 菜鸟驿站/顺丰点"
             @update:model-value="(v) => (campusForms[feeCampus].stations[idx] = v)"
           />
-          <van-button icon="delete-o" plain round size="small" type="danger" @click="removeName('stations', idx)" />
+          <van-button plain round size="small" type="danger" @click="removeName('stations', idx)">删除</van-button>
         </div>
         <van-button size="small" plain round icon="plus" class="add-btn" @click="addName('stations')">添加新驿站</van-button>
 
@@ -210,7 +210,7 @@
             placeholder="如 1-5号楼 / 教师公寓"
             @update:model-value="(v) => (campusForms[feeCampus].destinations[idx] = v)"
           />
-          <van-button icon="delete-o" plain round size="small" type="danger" @click="removeName('destinations', idx)" />
+          <van-button plain round size="small" type="danger" @click="removeName('destinations', idx)">删除</van-button>
         </div>
         <van-button size="small" plain round icon="plus" class="add-btn" @click="addName('destinations')">添加新目的地</van-button>
 
