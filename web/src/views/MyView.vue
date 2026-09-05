@@ -52,7 +52,7 @@
         value="已开通 (可在接单大厅抢单)"
         value-class="hunter-status-approved"
       >
-        <template #icon><span class="cell-emoji">🐰</span></template>
+        <template #icon><span class="cell-emoji">🐺</span></template>
       </van-cell>
       <van-cell
         v-else-if="hunterStatus === 'pending'"
