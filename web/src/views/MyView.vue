@@ -7,7 +7,7 @@
       <div class="user-main">
         <div class="avatar-wrap">
           <div class="avatar">{{ (user.username || '同学')[0] }}</div>
-          <div v-if="user.isHunter" class="hunter-badge" title="赏金猎人">🐰</div>
+          <div v-if="user.isHunter" class="hunter-badge" title="赏金猎人">🏃</div>
         </div>
         <div class="user-info">
           <div class="name-row">
