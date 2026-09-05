@@ -270,7 +270,7 @@
               <span class="muted">ID:
                 <span class="copyable copyable--inline" @click.stop="copyText(u.uid, '用户ID')">{{ u.uid || '未分配' }}</span>
               </span>
-              <span v-if="u.isHunter" class="tag tag--hunter">🐺 猎人</span>
+              <span v-if="u.isHunter" class="tag tag--hunter">🐺 赏金猎人</span>
               <span v-if="u.role === 'admin'" class="tag tag--admin">管理员</span>
             </div>
             <div class="muted mt-1">{{ u.phone || '未填手机号' }} · {{ campusName(u.campus) }}</div>
