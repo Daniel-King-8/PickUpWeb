@@ -301,6 +301,38 @@ module.exports = (ctx) => {
 
   /* ---------- 用户管理 ---------- */
 
+  /** 新增用户（管理员创建账号，可指定/自动生成用户ID与猎头身份） */
+  router.post('/users', async (req, res) => {
+    const { username, password, phone = '', campus = '', isHunter = false, uid } = req.body || {};
+    if (!username || !password) {
+      return res.status(400).json({ code: 400, message: '用户名和密码必填' });
+    }
+    if (String(password).length < 6) {
+      return res.status(400).json({ code: 400, message: '密码至少 6 位' });
+    }
+    const exist = await User.findOne({ where: { username } });
+    if (exist) return res.status(400).json({ code: 400, message: '用户名已被占用' });
+    // 用户ID：支持留空自动生成 / 指定 10 位纯数字（唯一）
+    let finalUid = generateUid();
+    if (uid !== undefined && uid !== '') {
+      if (!isUidLike(uid)) return res.status(400).json({ code: 400, message: '用户ID必须是 10 位纯数字' });
+      const hit = await User.findOne({ where: { uid: String(uid) } });
+      if (hit) return res.status(400).json({ code: 400, message: '该用户ID已被占用' });
+      finalUid = String(uid);
+    }
+    const user = await User.create({
+      uid: finalUid,
+      username,
+      password: bcrypt.hashSync(String(password), 10),
+      phone: String(phone).slice(0, 20),
+      role: 'user',
+      campus: ['scyz', 'cdny'].includes(campus) ? campus : '',
+      isHunter: !!isHunter,
+      hunterApplyAt: null,
+    });
+    return res.json({ code: 0, data: publicAdminUser(user) });
+  });
+
   router.get('/users', async (req, res) => {
     const list = await User.findAll({
       attributes: ['id', 'uid', 'username', 'phone', 'role', 'campus', 'isHunter', 'hunterApplyAt', 'createdAt'],

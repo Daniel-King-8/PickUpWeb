@@ -241,6 +241,12 @@
 
     <!-- 用户管理 -->
     <div v-if="tab === 'users'" class="section">
+      <!-- 用户工具栏：新增用户 -->
+      <div class="user-toolbar">
+        <van-button size="small" round plain type="primary" icon="plus" @click="openAddUser">新增用户</van-button>
+        <span class="muted">共 {{ users.length }} 位用户</span>
+      </div>
+
       <!-- 赏金猎人审批区 -->
       <div v-if="hunterApps.length" class="card hunter-card">
         <div class="card-top">
@@ -282,13 +288,13 @@
         </div>
       </div>
 
-      <!-- 编辑用户弹层 -->
+      <!-- 新增/编辑用户弹层 -->
       <van-popup v-model:show="showEditUser" position="bottom" round class="edit-popup">
-        <div class="edit-title">编辑用户信息</div>
+        <div class="edit-title">{{ editForm.id ? '编辑用户信息' : '新增用户' }}</div>
         <van-cell-group inset>
           <van-field v-model="editForm.username" label="用户名" />
           <van-field v-model="editForm.phone" type="tel" label="手机号" maxlength="11" />
-          <van-field v-model="editForm.uid" label="用户ID(10位)" maxlength="10" placeholder="10 位纯数字" />
+          <van-field v-model="editForm.uid" label="用户ID(10位)" maxlength="10" :placeholder="editForm.id ? '10 位纯数字' : '留空自动生成'" />
           <van-field label="赏金猎人权限">
             <template #input>
               <div class="switch-line">
@@ -305,10 +311,10 @@
               </van-radio-group>
             </template>
           </van-field>
-          <van-field v-model="editForm.password" type="password" label="重置密码" placeholder="留空则不修改（至少 6 位）" />
+          <van-field v-model="editForm.password" type="password" :label="editForm.id ? '重置密码' : '密码'" :placeholder="editForm.id ? '留空则不修改（至少 6 位）' : '至少 6 位'" />
         </van-cell-group>
         <div class="edit-actions">
-          <van-button type="primary" block round size="large" @click="saveEditUser">保存修改</van-button>
+          <van-button type="primary" block round size="large" @click="saveEditUser">{{ editForm.id ? '保存修改' : '创建用户' }}</van-button>
         </div>
       </van-popup>
     </div>
@@ -619,8 +625,41 @@ function openEditUser(u) {
   showEditUser.value = true;
 }
 
-/** 保存编辑（密码留空则不修改） */
+/** 打开新增用户弹层 */
+function openAddUser() {
+  Object.assign(editForm, {
+    id: null,
+    username: '',
+    phone: '',
+    uid: '',
+    campus: 'scyz',
+    isHunter: false,
+    password: '',
+  });
+  showEditUser.value = true;
+}
+
+/** 保存（新增走 POST /admin/users，编辑走 PUT + 可选密码） */
 async function saveEditUser() {
+  // 新增用户：创建账号
+  if (!editForm.id) {
+    if (!editForm.username) return showToast('请填写用户名');
+    if (!editForm.password || editForm.password.length < 6) return showToast('密码至少 6 位');
+    await api.post('/admin/users', {
+      username: editForm.username,
+      password: editForm.password,
+      phone: editForm.phone,
+      uid: editForm.uid,
+      campus: editForm.campus,
+      isHunter: editForm.isHunter,
+    });
+    showSuccessToast('用户已创建');
+    showEditUser.value = false;
+    loadUsers();
+    loadHunterApps();
+    return;
+  }
+  // 编辑用户
   await api.put(`/admin/users/${editForm.id}`, {
     username: editForm.username,
     phone: editForm.phone,
@@ -965,6 +1004,13 @@ onMounted(() => {
 .hunter-app {
   padding: 12px 0;
   border-top: 1px solid #f1f5f9;
+}
+/* 用户工具栏（新增用户） */
+.user-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 0 2px 12px;
 }
 .switch-line {
   display: flex;
