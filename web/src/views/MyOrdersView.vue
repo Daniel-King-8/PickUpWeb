@@ -10,7 +10,7 @@
     </van-tabs>
 
     <div class="list">
-      <van-empty v-if="!loading && list.length === 0" description="暂无相关订单" image="orders-o" />
+      <van-empty v-if="!loading && list.length === 0" description="暂无相关订单" />
       <div
         v-for="o in list"
         :key="o.id"

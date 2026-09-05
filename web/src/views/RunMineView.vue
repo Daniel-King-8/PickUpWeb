@@ -8,7 +8,7 @@
       <div class="header-sub">接单后请尽快前往驿站取件，送达后及时标记</div>
     </div>
 
-    <van-empty v-if="!loading && list.length === 0" description="还没有接单记录，去大厅抢一单吧" image="orders-o" />
+    <van-empty v-if="!loading && list.length === 0" description="还没有接单记录，去大厅抢一单吧" />
 
     <div class="list">
       <div
