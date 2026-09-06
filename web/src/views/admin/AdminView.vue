@@ -14,6 +14,7 @@
       <van-tab title="每日结算" name="settle" />
       <van-tab title="费率设置" name="settings" />
       <van-tab title="用户管理" name="users" :badge="hunterApps.length > 0 ? hunterApps.length : undefined" />
+      <van-tab title="Hermes 对接" name="agent" />
     </van-tabs>
 
     <!-- 待核对：PAYING 订单，查看截图 → 标记已支付 -->
@@ -236,6 +237,49 @@
         </van-cell>
         <van-field v-model="contactWechat" label="管理员微信号" placeholder="输入微信号方便雇主添加" />
         <van-button class="save-btn" round block type="primary" @click="saveContact">保存收款与联系方式</van-button>
+      </van-cell-group>
+    </div>
+
+    <!-- Hermes 对接 -->
+    <div v-if="tab === 'agent'" class="section">
+      <van-cell-group inset title="Agent 令牌">
+        <van-cell title="当前状态" :value="agent.enabled ? '已启用' : '未启用'">
+          <template #value>
+            <span :class="agent.enabled ? 'agent-on' : 'agent-off'">{{ agent.enabled ? '✅ 已启用' : '❌ 未启用' }}</span>
+          </template>
+        </van-cell>
+        <van-cell v-if="agent.enabled" title="令牌预览" :value="agent.tokenPreview" />
+        <van-cell v-if="agent.enabled" title="历史操作" :value="`${agent.logCount} 次`" />
+      </van-cell-group>
+      <div class="agent-actions">
+        <van-button type="primary" round block @click="genToken">{{ agent.enabled ? '重置令牌' : '生成令牌' }}</van-button>
+        <van-button v-if="agent.enabled" round block plain type="danger" class="mt-10" @click="disableToken">禁用 Agent</van-button>
+      </div>
+
+      <van-cell-group inset title="接口说明（发给 Hermes）" class="mt-16">
+        <van-cell title="拉取待播报事件" value="GET /api/agent/events" label="Header: X-AGENT-TOKEN: 令牌" />
+        <van-cell title="标记已播报" value="POST /api/agent/events/:id/acked" />
+        <van-cell title="确认核对（唯一写操作）" value="POST /api/agent/orders/:id/mark-paid" label="幂等：重复确认返回 already=true" />
+        <van-cell title="兜底只读" value="GET /api/agent/orders?status=PAYING" />
+      </van-cell-group>
+
+      <div class="mt-16">
+        <van-button size="small" plain round type="primary" @click="testAgent">发测试事件</van-button>
+      </div>
+
+      <van-cell-group inset title="最近事件" class="mt-16">
+        <van-cell
+          v-for="ev in agentEvents"
+          :key="ev.id"
+          :title="ev.title"
+          :label="`${ev.type} · ${ev.orderNo || '-'} · ${fmtTime(ev.createTime)}`"
+          :value="ev.status === 'pending' ? '待播报' : '已播报'"
+        >
+          <template #value>
+            <span :class="ev.status === 'pending' ? 'agent-on' : 'agent-off'">{{ ev.status === 'pending' ? '待播报' : '✅ 已播报' }}</span>
+          </template>
+        </van-cell>
+        <van-empty v-if="agentEvents.length === 0" description="暂无事件" />
       </van-cell-group>
     </div>
 
@@ -569,6 +613,49 @@ async function saveContact() {
   showSuccessToast('联系方式已保存');
 }
 
+/* ---------- Hermes Agent ---------- */
+const agent = reactive({ enabled: false, tokenPreview: '', logCount: 0 });
+const agentEvents = ref([]);
+
+async function loadAgent() {
+  const res = await api.get('/admin/agent');
+  agent.enabled = res.data.enabled;
+  agent.tokenPreview = res.data.tokenPreview;
+  agent.logCount = res.data.logCount;
+  const ev = await api.get('/admin/agent/events');
+  agentEvents.value = ev.data;
+}
+
+/** 生成/重置令牌（返回明文，立即告知 Hermes） */
+async function genToken() {
+  await showConfirmDialog({
+    title: agent.enabled ? '重置令牌' : '生成令牌',
+    message: '生成后请在设置页立即复制给 Hermes；重置会使旧令牌立刻失效。',
+  });
+  const res = await api.post('/admin/agent/token');
+  agent.enabled = true;
+  agent.tokenPreview = `${res.data.token.slice(0, 6)}****${res.data.token.slice(-4)}`;
+  await navigator.clipboard.writeText(res.data.token);
+  showSuccessToast('令牌已生成并复制，请粘贴给 Hermes');
+  loadAgent();
+}
+
+/** 禁用 Agent */
+async function disableToken() {
+  await showConfirmDialog({ title: '禁用 Agent', message: '禁用后 Hermes 将无法拉取与操作。' });
+  await api.delete('/admin/agent/token');
+  showSuccessToast('已禁用');
+  loadAgent();
+}
+
+/** 发测试事件（验证链路） */
+async function testAgent() {
+  if (!agent.enabled) return showToast('请先生成令牌');
+  await api.post('/admin/agent/test');
+  showSuccessToast('测试事件已入队，等待 Hermes 拉取');
+  loadAgent();
+}
+
 /* ---------- 用户管理 ---------- */
 const users = ref([]);
 const hunterApps = ref([]);
@@ -700,6 +787,7 @@ function loadAll() {
   loadSettings();
   loadUsers();
   loadHunterApps();
+  loadAgent();
 }
 
 watch(tab, () => {
@@ -715,6 +803,7 @@ watch(tab, () => {
     loadUsers();
     loadHunterApps();
   }
+  if (tab.value === 'agent') loadAgent();
 });
 
 onMounted(() => {
@@ -1004,6 +1093,23 @@ onMounted(() => {
 .hunter-app {
   padding: 12px 0;
   border-top: 1px solid #f1f5f9;
+}
+/* Agent 设置 */
+.agent-actions {
+  margin: 12px 16px;
+}
+.mt-10 {
+  margin-top: 10px;
+}
+.mt-16 {
+  margin-top: 16px;
+}
+.agent-on {
+  color: #059669;
+  font-weight: 600;
+}
+.agent-off {
+  color: #94a3b8;
 }
 /* 用户工具栏（新增用户） */
 .user-toolbar {

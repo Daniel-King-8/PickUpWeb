@@ -9,7 +9,7 @@ const express = require('express');
 const fs = require('fs');
 const path = require('path');
 const bcrypt = require('bcryptjs');
-const { Order, Setting, Settlement, User } = require('../models');
+const { Order, Setting, Settlement, User, Event, AgentLog } = require('../models');
 const { uploadImage } = require('../middleware/upload');
 const { cnToday, generateUid } = require('../utils/helpers');
 
@@ -277,6 +277,17 @@ module.exports = (ctx) => {
       );
       created.push(settlement.id);
     }
+    // 出站事件：结算单已生成（提醒管理员转账）
+    if (created.length > 0) {
+      const { emitEvent } = require('../utils/events');
+      await emitEvent({
+        type: 'settlement.created',
+        title: '💰 当日结算单已生成',
+        content: `${date} 共 ${created.length} 张结算单，请核对后线下转账`,
+        orderNo: '',
+        orderId: null,
+      });
+    }
     return res.json({ code: 0, data: { created, count: created.length } });
   });
 
@@ -303,6 +314,62 @@ module.exports = (ctx) => {
     const s = await Settlement.findByPk(req.params.id);
     if (!s) return res.status(404).json({ code: 404, message: '结算单不存在' });
     await s.update({ status: 'paid', paidAt: new Date() });
+    return res.json({ code: 0, data: { success: true } });
+  });
+
+  /* ---------- Hermes Agent 对接 ---------- */
+
+  /** 获取 Agent token 状态（不返回明文，仅是否已配置） */
+  router.get('/agent', async (req, res) => {
+    const s = await Setting.findOne({ where: { key: 'agentToken' } });
+    const logCount = await AgentLog.count();
+    return res.json({
+      code: 0,
+      data: {
+        enabled: !!(s && s.value),
+        tokenPreview: s && s.value ? `${s.value.slice(0, 6)}****${s.value.slice(-4)}` : '',
+        logCount,
+      },
+    });
+  });
+
+  /** 生成/重置 Agent token（返回明文一次，请立即保存给 Hermes） */
+  router.post('/agent/token', async (req, res) => {
+    const crypto = require('crypto');
+    const token = crypto.randomBytes(24).toString('hex'); // 48 位 hex
+    const s = await Setting.findOne({ where: { key: 'agentToken' } });
+    if (s) await s.update({ value: token });
+    else await Setting.create({ key: 'agentToken', value: token });
+    return res.json({ code: 0, data: { token } });
+  });
+
+  /** 禁用 Agent（清除 token） */
+  router.delete('/agent/token', async (req, res) => {
+    const s = await Setting.findOne({ where: { key: 'agentToken' } });
+    if (s) await s.update({ value: '' });
+    return res.json({ code: 0, data: { success: true } });
+  });
+
+  /** 事件队列记录（设置页展示） */
+  router.get('/agent/events', async (req, res) => {
+    const list = await Event.findAll({
+      order: [['id', 'DESC']],
+      limit: 30,
+      attributes: ['id', 'type', 'title', 'orderNo', 'status', 'createTime', 'ackedAt'],
+    });
+    return res.json({ code: 0, data: list });
+  });
+
+  /** 测试事件：发一条验证 Hermes 链路 */
+  router.post('/agent/test', async (req, res) => {
+    const { emitEvent } = require('../utils/events');
+    await emitEvent({
+      type: 'agent.test',
+      title: '🧪 Hermes 测试事件',
+      content: `来自取个件呗 · 时间 ${require('../utils/helpers').cnToday()}`,
+      orderNo: '',
+      orderId: null,
+    });
     return res.json({ code: 0, data: { success: true } });
   });
 
