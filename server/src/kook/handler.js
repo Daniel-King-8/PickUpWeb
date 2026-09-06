@@ -17,7 +17,7 @@ const { getKookConfig } = require('./config');
 const { sendDirectMessage, uploadLocalAsset } = require('./api');
 const cards = require('./cards');
 const { decodeBtn } = cards;
-const { calcFee, generateOrderNo, normalizeFeeRules } = require('../utils/helpers');
+const { calcFee, generateOrderNo, normalizeFeeRules, generateUid } = require('../utils/helpers');
 // 注意：orderService 须在函数内惰性 require（handler ← orderService ← kook/index ← handler 存在循环依赖，
 // 顶部 require 会在对手模块尚未完成时拿到空对象导致 "xxx is not a function"）
 
@@ -114,6 +114,36 @@ async function dmCard(token, kookId, card) {
   await sendDirectMessage(token, kookId, 10, JSON.stringify([card]));
 }
 
+/** 校区选项（与 users.js CAMPUS_ALLOWED 一致；两校区可扩展）
+ * 若无校区则下单流程先让用户选择（Kook 用户无需注册 Web 账号，校区在此确认） */
+const CAMPUS_OPTIONS = [
+  { label: '四川邮电职业技术学院', val: 'scyz' },
+  { label: '成都农业科技职业学院', val: 'cdny' },
+];
+
+/**
+ * 获取 Kook 用户对应的平台账号（首次自动创建：username=kook_<KookID>，随机密码，
+ * kookId 即写入 —— 相当于自动绑定，之后通知可正常私信该用户）
+ */
+async function getOrCreateKookUser(kookId, kookName) {
+  let user = await User.findOne({ where: { kookId } });
+  if (user) return user;
+  const bcrypt = require('bcryptjs');
+  let username = `kook_${kookId}`;
+  const password = `${Math.random().toString(36).slice(2, 10)}${Math.random().toString(36).slice(2, 6)}`;
+  user = await User.create({
+    uid: generateUid(),
+    username,
+    nickname: String(kookName || '').slice(0, 50),
+    password: bcrypt.hashSync(password, 10),
+    role: 'user',
+    campus: '',
+    kookId,
+  });
+  console.log(`[kook] 已自动创建用户 ${username}（Kook ${kookId}）`);
+  return user;
+}
+
 /** 读当前校区费率 */
 async function readFeeRules(campus) {
   const s = await Setting.findOne({ where: { key: 'feeRules' } });
@@ -138,12 +168,35 @@ async function readPayInfo() {
   };
 }
 
-/** 下单入口（🎯 下单）：校验校区/费率，记忆最近收货信息 */
+/** 下单入口（🎯 下单）：先确认校区（无则问），再走站点流程 */
 async function startPublish(token, user) {
+  // 无校区：先让用户选择（Kook 用户无需网页注册）
   if (!user.campus) {
-    await dm(token, user.kookId, '请先到网页「我的-绑定校区」选择校区后，才能发布悬赏');
+    const s = setSession(user.kookId, 'chooseCampus', { user, saved: {} });
+    await dmCard(token, user.kookId, {
+      type: 'card',
+      theme: 'info',
+      modules: [
+        header('🏫 请选择就读校区：'),
+        { type: 'action-group', elements: CAMPUS_OPTIONS.map((c) => ({ type: 'button', theme: 'primary', value: JSON.stringify({ act: 'pick-campus', id: c.val }), click: 'return-val', text: { type: 'plain-text', content: c.label } })) },
+      ],
+    });
     return;
   }
+  await continuePublish(token, user);
+}
+
+/** 选择校区后继续下单流程 */
+async function pickCampus(token, user, campus) {
+  const s = getSession(user.kookId);
+  if (!s || s.state !== 'chooseCampus') return;
+  await user.update({ campus });
+  await dm(token, user.kookId, `✅ 校区已确认：${CAMPUS_OPTIONS.find((c) => c.val === campus)?.label || campus}`);
+  await continuePublish(token, user);
+}
+
+/** 校区已就绪：拉费率/记忆信息，问站点 */
+async function continuePublish(token, user) {
   const feeRules = await readFeeRules(user.campus);
   if (!feeRules || !feeRules.stations || !feeRules.stations.length) {
     await dm(token, user.kookId, '费率未配置，请联系管理员');
@@ -400,7 +453,13 @@ function extractButtons(event) {
   if (!extra) return [];
   if (extra.type === 'message_btn_click' && extra.body && extra.body.value !== undefined) {
     const b = extra.body;
-    return [{ user_id: b.user_id, msg_id: b.msg_id || event.msg_id, value: b.value }];
+    const info = b.user_info || {};
+    return [{
+      user_id: b.user_id,
+      msg_id: b.msg_id || event.msg_id,
+      value: b.value,
+      authorName: info.nickname || info.username || '',
+    }];
   }
   const arr = extra.buttons || (extra.button ? [extra.button] : []);
   return arr.map((b) => ({
@@ -425,7 +484,7 @@ const FAIL_TEXT = {
 };
 
 async function handleButton(token, clicker, buttons) {
-  const FLOW_ACTS = ['publish-start', 'pick-station', 'pick-destination', 'use-saved', 'change-info', 'skip-remark', 'confirm-pay', 'upload-shot-yes', 'upload-shot-no', 'cancel-own'];
+  const FLOW_ACTS = ['publish-start', 'pick-campus', 'pick-station', 'pick-destination', 'use-saved', 'change-info', 'skip-remark', 'confirm-pay', 'upload-shot-yes', 'upload-shot-no', 'cancel-own'];
   const ORDER_ACTS = ['accept', 'deliver', 'confirm', 'mark-paid', 'delete-order'];
   for (const btn of buttons) {
     const payload = decodeBtn(btn.value);
@@ -433,10 +492,13 @@ async function handleButton(token, clicker, buttons) {
     const { act, id } = payload;
     if (!ORDER_ACTS.includes(act) && !FLOW_ACTS.includes(act)) continue;
 
-    // 点击者身份：kookId → 平台用户
-    const user = await User.findOne({ where: { kookId: clicker } });
-    if (!user) {
-      await dm(token, clicker, '请先到网页「我的-绑定Kook」绑定账号后再操作');
+    // 点击者身份：kookId → 平台账号（首次自动创建；Kook 用户无需先网页注册/绑定）
+    let user = null;
+    try {
+      user = await getOrCreateKookUser(clicker, btn.authorName || '');
+      if (!user) throw new Error('no user');
+    } catch (e) {
+      await dm(token, clicker, '账号创建失败，请稍后再试');
       continue;
     }
 
@@ -445,6 +507,7 @@ async function handleButton(token, clicker, buttons) {
       try {
         switch (act) {
           case 'publish-start': await startPublish(token, user); break;
+          case 'pick-campus': await pickCampus(token, user, id); break;
           case 'pick-station': await sessionPickStation(token, user, id); break;
           case 'pick-destination': await sessionPickDestination(token, user, id); break;
           case 'use-saved': await useSaved(token, user); break;
