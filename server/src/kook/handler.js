@@ -332,7 +332,7 @@ async function sessionPhone(token, user, content) {
     modules: [
       cards.header('📝 备注（选填）'),
       { type: 'section', text: { type: 'plain-text', content: '直接发送文字填写备注（如：大件/需轻放），或选择无备注。' } },
-      { type: 'action-group', elements: [{ type: 'button', theme: 'primary', value: JSON.stringify({ act: 'skip-remark' }), click: 'return-val', text: { type: 'plain-text', content: '⏭ 无备注' } }] },
+      { type: 'action-group', elements: [{ type: 'button', theme: 'primary', value: JSON.stringify({ act: 'skip-remark', id: 0 }), click: 'return-val', text: { type: 'plain-text', content: '⏭ 无备注' } }] },
     ],
   });
 }
@@ -424,9 +424,18 @@ async function useSaved(token, user) {
     modules: [
       cards.header('📝 备注（选填）'),
       { type: 'section', text: { type: 'plain-text', content: '直接发送文字填写备注，或选择无备注。' } },
-      { type: 'action-group', elements: [{ type: 'button', theme: 'primary', value: JSON.stringify({ act: 'skip-remark' }), click: 'return-val', text: { type: 'plain-text', content: '⏭ 无备注' } }] },
+      { type: 'action-group', elements: [{ type: 'button', theme: 'primary', value: JSON.stringify({ act: 'skip-remark', id: 0 }), click: 'return-val', text: { type: 'plain-text', content: '⏭ 无备注' } }] },
     ],
   });
+}
+
+/** 分页换页：重新发送一页选项卡（更多/上一页按钮共用） */
+async function moreOptions(token, user, act, page, listKey) {
+  const s = getSession(user.kookId);
+  if (!s) return;
+  const list = (listKey === 'stations' ? s.data.feeRules.stations : s.data.feeRules.destinations) || [];
+  const title = listKey === 'stations' ? '🏬 请选择快递站点：' : '🏨 请选择目的地：';
+  await dmCard(token, user.kookId, cards.pickCard(title, list, act, Math.max(0, page)));
 }
 
 /** 雇主取消订单（审核完成卡上的取消按钮）→ 退款提示 */
@@ -494,7 +503,7 @@ function isNewBtnMsg(msgId) {
 }
 
 async function handleButton(token, clicker, buttons) {
-  const FLOW_ACTS = ['publish-start', 'pick-campus', 'pick-station', 'pick-destination', 'use-saved', 'change-info', 'skip-remark', 'confirm-pay', 'upload-shot-yes', 'upload-shot-no', 'cancel-own'];
+  const FLOW_ACTS = ['publish-start', 'pick-campus', 'pick-station', 'pick-station-more', 'pick-destination', 'pick-destination-more', 'use-saved', 'change-info', 'skip-remark', 'confirm-pay', 'upload-shot-yes', 'upload-shot-no', 'cancel-own'];
   const ORDER_ACTS = ['accept', 'deliver', 'confirm', 'mark-paid', 'delete-order'];
   for (const btn of buttons) {
     if (!isNewBtnMsg(btn.msg_id)) continue;
@@ -520,7 +529,9 @@ async function handleButton(token, clicker, buttons) {
           case 'publish-start': await startPublish(token, user); break;
           case 'pick-campus': await pickCampus(token, user, id); break;
           case 'pick-station': await sessionPickStation(token, user, id); break;
+          case 'pick-station-more': await moreOptions(token, user, 'pick-station', Number(id), 'stations'); break;
           case 'pick-destination': await sessionPickDestination(token, user, id); break;
+          case 'pick-destination-more': await moreOptions(token, user, 'pick-destination', Number(id), 'destinations'); break;
           case 'use-saved': await useSaved(token, user); break;
           case 'change-info': await askDestination(token, user); break;
           case 'skip-remark': await kookSubmitOrder(token, user); break;

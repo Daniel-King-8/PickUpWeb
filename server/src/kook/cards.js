@@ -61,7 +61,8 @@ const encodeBtn = ({ act, id }) => JSON.stringify({ act, id });
 const decodeBtn = (value) => {
   try {
     const o = JSON.parse(value);
-    if (o && typeof o.act === 'string' && o.id !== undefined) return o;
+    // id 可缺省（如 skip-remark 等无参数动作），只需 act 有效
+    if (o && typeof o.act === 'string') return o;
   } catch (e) {
     /* 非法 value */
   }
@@ -275,17 +276,22 @@ const orderEntryCard = () => ({
   ],
 });
 
-/** 选项卡（站点/目的地等按钮列表，最多 4 个按钮） */
-const pickCard = (title, names, act) => ({
-  type: 'card',
-  theme: 'info',
-  modules: [
-    header(title),
-    actionGroup(names.slice(0, 4).map((n) => button(n, 'primary', act, n))),
-  ],
-});
+/** 选项卡（站点/目的地等按钮列表）：每页最多 4 个按钮（Kook 限制），超出自动分页 */
+const pickCard = (title, items, act, page = 0, pageSize = 4) => {
+  const slice = (items || []).slice(page * pageSize, (page + 1) * pageSize);
+  const els = slice.map((n) => button(n, 'primary', act, n));
+  if ((items || []).length > (page + 1) * pageSize) {
+    els.push(button(`➡ 更多（共 ${items.length} 个）`, 'secondary', `${act}-more`, page + 1));
+  }
+  if (page > 0) els.push(button('🔄 上一页', 'secondary', `${act}-more`, page - 1));
+  return {
+    type: 'card',
+    theme: 'info',
+    modules: [header(title), actionGroup(els)],
+  };
+};
 
-/** 付款卡：收款码 + 管理员微信 + 金额 + 【我已确认付款】 */
+/** 付款卡：收款码 + 管理员微信 + 金额 + 【我已确认付款】（按钮置于图片前：私信卡片的按钮在图片之后不渲染） */
 const payCard = (order, payInfo) => {
   const lines = [
     `订单号：${order.orderNo}`,
@@ -297,16 +303,14 @@ const payCard = (order, payInfo) => {
   const modules = [
     { type: 'header', text: { type: 'plain-text', content: `💳 请支付 ¥${Number(order.reward).toFixed(2)}` } },
     { type: 'section', text: { type: 'kmarkdown', content: lines.join('\n') } },
-  ];
-  const qr = payInfo.payQrWx || payInfo.payQrAlipay;
-  if (qr) modules.push({ type: 'image-group', elements: [{ type: 'image', src: qr }] });
-  modules.push(
+    actionGroup([button('✅ 我已确认付款', 'success', 'confirm-pay', order.id)]),
     {
       type: 'context',
       elements: [{ type: 'plain-text', content: payInfo.contactWechat ? '扫码或添加管理员微信转账，转账备注订单号' : '请扫码转账，备注订单号' }],
     },
-    actionGroup([button('✅ 我已确认付款', 'success', 'confirm-pay', order.id)])
-  );
+  ];
+  const qr = payInfo.payQrWx || payInfo.payQrAlipay;
+  if (qr) modules.push({ type: 'image-group', elements: [{ type: 'image', src: qr }] });
   return { type: 'card', theme: 'warning', modules };
 };
 
