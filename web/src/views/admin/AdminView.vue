@@ -58,6 +58,7 @@
         <div class="card-actions">
           <van-button size="small" plain round icon="photograph" @click="viewScreenshot(o)">查看付款截图</van-button>
           <van-button size="small" type="primary" round icon="passed" @click="markPaid(o)">确认收到款项并发布</van-button>
+          <van-button size="small" plain round type="danger" icon="delete-o" @click="onDeletePayOrder(o)">删除订单</van-button>
         </div>
       </div>
     </div>
@@ -278,6 +279,7 @@
                 <span class="copyable copyable--inline" @click.stop="copyText(u.uid, '用户ID')">{{ u.uid || '未分配' }}</span>
               </span>
               <span v-if="u.isHunter" class="tag tag--hunter">🐺 赏金猎人</span>
+              <span v-if="u.isSubAdmin" class="tag tag--subadmin">🛠 小管理员</span>
               <span v-if="u.role === 'admin'" class="tag tag--admin">管理员</span>
             </div>
             <div class="muted mt-1">{{ u.phone || '未填手机号' }} · {{ campusName(u.campus) }}</div>
@@ -301,6 +303,14 @@
               <div class="switch-line">
                 <span>{{ editForm.isHunter ? '已授予接单资格' : '未授予' }}</span>
                 <van-switch v-model="editForm.isHunter" size="20" />
+              </div>
+            </template>
+          </van-field>
+          <van-field label="小管理员身份">
+            <template #input>
+              <div class="switch-line">
+                <span>{{ editForm.isSubAdmin ? '可在 Kook 核对/删除待核对订单' : '未授予' }}</span>
+                <van-switch v-model="editForm.isSubAdmin" size="20" />
               </div>
             </template>
           </van-field>
@@ -407,6 +417,18 @@ async function markPaid(o) {
   await showConfirmDialog({ title: '确认收款', message: `核对单号 ${o.orderNo} 已到账？确认后订单自动发布到大厅。` });
   await api.post(`/admin/orders/${o.id}/mark-paid`);
   showSuccessToast('已标记支付并上线大厅');
+  loadPaying();
+}
+
+/** 待核对页删除订单（物理删除，不可恢复；Kook 卡片同步更新为「已删除」） */
+async function onDeletePayOrder(o) {
+  await showConfirmDialog({
+    title: '删除订单',
+    message: `确认删除订单 ${o.orderNo}？删除后不可恢复（不记入流水），Kook 卡片同步标记为已删除。`,
+    confirmText: '删除',
+  });
+  await api.delete(`/admin/orders/${o.id}`);
+  showSuccessToast('已删除');
   loadPaying();
 }
 
@@ -689,7 +711,7 @@ async function testKook() {
 const users = ref([]);
 const hunterApps = ref([]);
 const showEditUser = ref(false);
-const editForm = reactive({ id: null, username: '', phone: '', uid: '', campus: 'scyz', isHunter: false, password: '' });
+const editForm = reactive({ id: null, username: '', phone: '', uid: '', campus: 'scyz', isHunter: false, isSubAdmin: false, password: '' });
 
 function fmtTime(t) {
   return t ? String(t).replace('T', ' ').slice(5, 16) : '';
@@ -736,6 +758,7 @@ function openEditUser(u) {
     uid: u.uid || '',
     campus: u.campus || 'scyz',
     isHunter: !!u.isHunter,
+    isSubAdmin: !!u.isSubAdmin,
     password: '',
   });
   showEditUser.value = true;
@@ -750,6 +773,7 @@ function openAddUser() {
     uid: '',
     campus: 'scyz',
     isHunter: false,
+    isSubAdmin: false,
     password: '',
   });
   showEditUser.value = true;
@@ -768,6 +792,7 @@ async function saveEditUser() {
       uid: editForm.uid,
       campus: editForm.campus,
       isHunter: editForm.isHunter,
+      isSubAdmin: editForm.isSubAdmin,
     });
     showSuccessToast('用户已创建');
     showEditUser.value = false;
@@ -782,6 +807,7 @@ async function saveEditUser() {
     uid: editForm.uid,
     campus: editForm.campus,
     isHunter: editForm.isHunter,
+    isSubAdmin: editForm.isSubAdmin,
   });
   if (editForm.password) {
     if (editForm.password.length < 6) return showToast('新密码至少 6 位');
@@ -957,6 +983,12 @@ onMounted(() => {
 .tag--hunter {
   background: #ecfdf5;
   color: #059669;
+  margin-left: 6px;
+}
+.tag--subadmin {
+  background: #f0fdfa;
+  color: #0f766e;
+  border: 1px solid rgba(15, 118, 110, 0.2);
   margin-left: 6px;
 }
 .tag--admin {

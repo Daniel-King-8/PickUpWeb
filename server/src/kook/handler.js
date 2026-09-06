@@ -125,7 +125,7 @@ async function handleButton(token, clicker, buttons) {
     const payload = decodeBtn(btn.value);
     if (!payload) continue;
     const { act, id } = payload;
-    if (!['accept', 'deliver', 'confirm', 'mark-paid'].includes(act)) continue;
+    if (!['accept', 'deliver', 'confirm', 'mark-paid', 'delete-order'].includes(act)) continue;
 
     // 点击者身份：kookId → 平台用户
     const user = await User.findOne({ where: { kookId: clicker } });
@@ -133,9 +133,10 @@ async function handleButton(token, clicker, buttons) {
       await dm(token, clicker, '请先到网页「我的-绑定Kook」绑定账号后再操作');
       continue;
     }
-    // mark-paid 仅管理员
-    if (act === 'mark-paid' && user.role !== 'admin') {
-      await dm(token, clicker, '只有管理员可确认到账');
+    // 核对/删除权限：admin 或 小管理员（小管理员仅 Kook 内操作，无 Web 后台）
+    const isAdminOp = user.role === 'admin' || user.isSubAdmin;
+    if ((act === 'mark-paid' || act === 'delete-order') && !isAdminOp) {
+      await dm(token, clicker, '只有管理员可执行此操作');
       continue;
     }
     let res;
@@ -153,6 +154,9 @@ async function handleButton(token, clicker, buttons) {
           break;
         case 'mark-paid':
           res = await orderService.markPaidOrder(id);
+          break;
+        case 'delete-order':
+          res = await orderService.deleteOrder(id);
           break;
       }
     } catch (e) {

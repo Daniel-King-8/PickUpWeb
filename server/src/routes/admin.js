@@ -50,6 +50,8 @@ function publicAdminUser(u) {
     campus: u.campus,
     isHunter: !!u.isHunter,
     hunterApplyAt: u.hunterApplyAt || null,
+    isSubAdmin: !!u.isSubAdmin,
+    kookId: u.kookId || '',
   };
 }
 
@@ -135,22 +137,10 @@ module.exports = (ctx) => {
     return res.json({ code: 0, data: { success: true } });
   });
 
-  /** 删除订单（物理删除记录，并尽力清理其上传文件） */
+  /** 删除订单（物理删除记录 + 清理上传文件 + Kook 卡片更新为「已删除」；逻辑在 orderService 与 Kook 共用） */
   router.delete('/orders/:id', async (req, res) => {
-    const order = await Order.findByPk(req.params.id);
-    if (!order) return res.status(404).json({ code: 404, message: '订单不存在' });
-    // 清理该订单上传的截图/照片（尽力而为，文件不存在时忽略）
-    const uploadDir = process.env.UPLOAD_DIR || '/data/uploads';
-    [order.payerScreenshot, order.deliveryPhoto].forEach((filePath) => {
-      if (!filePath) return;
-      try {
-        const full = path.join(uploadDir, path.basename(filePath));
-        fs.unlinkSync(full);
-      } catch (e) {
-        /* 文件不存在等，忽略 */
-      }
-    });
-    await order.destroy();
+    const r = await service.deleteOrder(req.params.id);
+    if (!r.ok) return res.status(404).json({ code: 404, message: r.message });
     return res.json({ code: 0, data: { success: true } });
   });
 
@@ -306,9 +296,9 @@ module.exports = (ctx) => {
 
   /* ---------- 用户管理 ---------- */
 
-  /** 新增用户（管理员创建账号，可指定/自动生成用户ID与猎头身份） */
+  /** 新增用户（管理员创建账号，可指定/自动生成用户ID与猎头/小管理员身份） */
   router.post('/users', async (req, res) => {
-    const { username, password, phone = '', campus = '', isHunter = false, uid } = req.body || {};
+    const { username, password, phone = '', campus = '', isHunter = false, isSubAdmin = false, uid } = req.body || {};
     if (!username || !password) {
       return res.status(400).json({ code: 400, message: '用户名和密码必填' });
     }
@@ -333,6 +323,7 @@ module.exports = (ctx) => {
       role: 'user',
       campus: ['scyz', 'cdny'].includes(campus) ? campus : '',
       isHunter: !!isHunter,
+      isSubAdmin: !!isSubAdmin,
       hunterApplyAt: null,
     });
     return res.json({ code: 0, data: publicAdminUser(user) });
@@ -340,7 +331,7 @@ module.exports = (ctx) => {
 
   router.get('/users', async (req, res) => {
     const list = await User.findAll({
-      attributes: ['id', 'uid', 'username', 'nickname', 'phone', 'role', 'campus', 'isHunter', 'hunterApplyAt', 'createdAt'],
+      attributes: ['id', 'uid', 'username', 'nickname', 'phone', 'role', 'campus', 'isHunter', 'isSubAdmin', 'kookId', 'hunterApplyAt', 'createdAt'],
       order: [['id', 'DESC']],
     });
     return res.json({ code: 0, data: list });
@@ -378,7 +369,7 @@ module.exports = (ctx) => {
     const user = await User.findByPk(req.params.id);
     if (!user) return res.status(404).json({ code: 404, message: '用户不存在' });
 
-    const { username, phone, campus, uid, isHunter } = req.body || {};
+    const { username, phone, campus, uid, isHunter, isSubAdmin } = req.body || {};
     // 用户名唯一
     if (username !== undefined && String(username) !== user.username) {
       const exist = await User.findOne({ where: { username } });
@@ -397,6 +388,7 @@ module.exports = (ctx) => {
     if (phone !== undefined) user.phone = String(phone).slice(0, 20);
     if (campus !== undefined) user.campus = ['scyz', 'cdny'].includes(campus) ? campus : user.campus;
     if (isHunter !== undefined) user.isHunter = !!isHunter;
+    if (isSubAdmin !== undefined) user.isSubAdmin = !!isSubAdmin; // 小管理员：仅 admin 授予，无申请入口
     await user.save();
     return res.json({ code: 0, data: publicAdminUser(user) });
   });

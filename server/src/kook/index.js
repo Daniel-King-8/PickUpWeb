@@ -127,8 +127,21 @@ async function notifyOrderEvent(transition, orderId) {
   return notifyChain;
 }
 
-async function doNotifyOrderEvent(transition, orderId) {
+async function doNotifyOrderEvent(transition, data) {
   try {
+    // 物理删除：订单已不存在，直接更新内存索引中的待核对卡片为「已删除」
+    if (transition === 'ORDER_DELETED') {
+      const { orderId, orderNo } = data;
+      const cfg = await getKookConfig();
+      if (!cfg.token) return;
+      const prev = sentCheckCards.get(orderId);
+      if (prev) {
+        await updateMessage(cfg.token, prev.msgId, JSON.stringify([cards.adminDeletedCard(orderNo)]));
+        sentCheckCards.delete(orderId);
+      }
+      return;
+    }
+    const orderId = data;
     const cfg = await getKookConfig();
     if (!cfg.token || !cfg.hallChannelId && !cfg.adminChannelId) {
       console.log(`[kook] 通知跳过：${transition} 订单${orderId}（token 或频道未配置）`);

@@ -135,9 +135,12 @@ const adminCheckCard = (order, employerName, employerUid, screenshotUrl) => {
   ];
   if (screenshotUrl) modules.push(imageGroup([screenshotUrl]));
   modules.push(
-    actionGroup([button('✅ 确认到账并发布', 'success', 'mark-paid', order.id)]),
+    actionGroup([
+      button('✅ 确认到账并发布', 'success', 'mark-paid', order.id),
+      button('🗑 删除订单', 'danger', 'delete-order', order.id),
+    ]),
     context(screenshotUrl
-      ? '截图核对无误后点击按钮，订单将自动发布到接单大厅'
+      ? '核对无误后可确认发布；恶意/重复下单可删除（物理删除不可恢复）'
       : '核对收款记录无误即可确认（付款截图可后补，上传后自动显示）')
   );
   return { type: 'card', theme: 'warning', modules };
@@ -157,6 +160,22 @@ const adminConfirmedCard = (order) => ({
           `订单号：${order.orderNo}`,
           `雇主已付款，订单已发布到接单大厅。`,
         ].join('\n'),
+      },
+    },
+  ],
+});
+
+/** 已删除的待核对卡片（删除订单后更新旧卡用） */
+const adminDeletedCard = (orderNo) => ({
+  type: 'card',
+  theme: 'danger',
+  modules: [
+    header('🗑 订单已删除'),
+    {
+      type: 'section',
+      text: {
+        type: 'plain-text',
+        content: [`订单号：${orderNo}`, `已由管理员删除（不记入流水）。`].join('\n'),
       },
     },
   ],
@@ -235,6 +254,7 @@ module.exports = {
   hallTakenCard,
   adminCheckCard,
   adminConfirmedCard,
+  adminDeletedCard,
   runnerAcceptedCard,
   employerAcceptedCard,
   employerDeliveredCard,

@@ -28,6 +28,8 @@ const User = db.define(
     // Kook 机器人绑定：Kook 用户 id（纯数字串）。唯一性由代码层校验保障
     // （不加 unique 约束：与 uid 同因，SQLite 对已有表 ADD COLUMN 带唯一约束会失败）
     kookId: { type: DataTypes.STRING(32), defaultValue: null },
+    // 小管理员：仅 admin 授予（无申请入口）；权限=仅 Kook 内核对/删除待核对订单，无 Web 后台权限
+    isSubAdmin: { type: DataTypes.BOOLEAN, defaultValue: false },
   },
   { tableName: 'users' }
 );

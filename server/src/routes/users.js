@@ -26,6 +26,8 @@ module.exports = (ctx) => {
       campus: u.campus,
       isHunter: !!u.isHunter,
       hunterApplyAt: u.hunterApplyAt || null,
+      isSubAdmin: !!u.isSubAdmin,
+      kookId: u.kookId || '',
     };
   }
 

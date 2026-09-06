@@ -50,6 +50,31 @@ async function acceptOrder(id, user) {
 }
 
 /**
+ * 物理删除订单（管理员/小管理员；剔除恶意/误下单）
+ * 同时清理其上传的截图/照片文件，并通知 Kook 把对应卡片更新为「已删除」
+ */
+async function deleteOrder(id) {
+  const order = await Order.findByPk(id);
+  if (!order) return fail('NOT_FOUND');
+  // 清理该订单上传的截图/照片（尽力而为，文件不存在时忽略）
+  const path = require('path');
+  const fs = require('fs');
+  const uploadDir = process.env.UPLOAD_DIR || '/data/uploads';
+  [order.payerScreenshot, order.deliveryPhoto].forEach((filePath) => {
+    if (!filePath) return;
+    try {
+      fs.unlinkSync(path.join(uploadDir, path.basename(filePath)));
+    } catch (e) {
+      /* 文件不存在等，忽略 */
+    }
+  });
+  const orderNo = order.orderNo;
+  await order.destroy();
+  kook.notifyOrderEvent('ORDER_DELETED', { orderId: id, orderNo }); // 更新待核对卡片为「已删除」
+  return { ok: true, orderNo };
+}
+
+/**
  * 标记送达：仅该单跑腿员；照片可选（Kook 端无照片）
  */
 async function deliverOrder(id, user, { photo = '' } = {}) {
@@ -132,4 +157,5 @@ module.exports = {
   cancelOrderByUser,
   cancelOrderByAdmin,
   markPaidOrder,
+  deleteOrder,
 };
