@@ -19,6 +19,8 @@ const cards = require('./cards');
 const sentCheckCards = new Map();
 /** 已发送的"大厅"卡片索引：orderId -> { channelId, msgId }，被抢单后更新为"已被接单" */
 const sentHallCards = new Map();
+/** 通知串行队列：同一订单的 PAID(发卡记录 msg_id) 与 ACCEPTED(更新卡) 须按调用顺序执行，否则可能竞态丢更新 */
+let notifyChain = Promise.resolve();
 
 /** 启动：注册事件处理器 + 注入 Bot 自身 id（过滤自消息）+ 连接 */
 async function start() {
@@ -120,6 +122,12 @@ async function uploadForCard(token, url) {
  *   其余 transition 由 orderService 成功分支统一调用（Web + Kook 双入口只写一处）。
  */
 async function notifyOrderEvent(transition, orderId) {
+  // 排队执行：保证同订单的过渡通知按触发顺序串行（发送卡片 → 记录 → 更新卡片）
+  notifyChain = notifyChain.then(() => doNotifyOrderEvent(transition, orderId));
+  return notifyChain;
+}
+
+async function doNotifyOrderEvent(transition, orderId) {
   try {
     const cfg = await getKookConfig();
     if (!cfg.token || !cfg.hallChannelId && !cfg.adminChannelId) return;
