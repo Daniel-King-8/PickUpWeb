@@ -175,7 +175,7 @@ async function startPublish(token, user) {
     const s = setSession(user.kookId, 'chooseCampus', { user, saved: {} });
     await dmCard(token, user.kookId, {
       type: 'card',
-      theme: 'info',
+      theme: cards.randomTheme(),
       modules: [
         cards.header('🏫 请选择就读校区：'),
         { type: 'action-group', elements: CAMPUS_OPTIONS.map((c) => ({ type: 'button', theme: 'primary', value: JSON.stringify({ act: 'pick-campus', id: c.val }), click: 'return-val', text: { type: 'plain-text', content: c.label } })) },
@@ -278,7 +278,7 @@ async function sessionPickupCode(token, user, content) {
     await dm(token, user.kookId, `历史收货信息：\n送达：${s.data.saved.deliverPlace}\n电话：${s.data.saved.contactPhone}`);
     await dmCard(token, user.kookId, {
       type: 'card',
-      theme: 'info',
+      theme: cards.randomTheme(),
       modules: [
         cards.header('确认收货信息'),
         {
@@ -288,8 +288,8 @@ async function sessionPickupCode(token, user, content) {
         {
           type: 'action-group',
           elements: [
-            { type: 'button', theme: 'success', value: JSON.stringify({ act: 'use-saved' }), click: 'return-val', text: { type: 'plain-text', content: '✔ 不更改，直接使用' } },
-            { type: 'button', theme: 'warning', value: JSON.stringify({ act: 'change-info' }), click: 'return-val', text: { type: 'plain-text', content: '🔄 更改' } },
+            { type: 'button', theme: 'success', value: JSON.stringify({ act: 'use-saved', id: 0 }), click: 'return-val', text: { type: 'plain-text', content: '✔ 不更改，直接使用' } },
+            { type: 'button', theme: 'warning', value: JSON.stringify({ act: 'change-info', id: 0 }), click: 'return-val', text: { type: 'plain-text', content: '🔄 更改' } },
           ],
         },
       ],
@@ -355,7 +355,7 @@ async function sessionReward(token, user, content) {
 async function askRemarkCard(token, user) {
   await dmCard(token, user.kookId, {
     type: 'card',
-    theme: 'info',
+    theme: cards.randomTheme(),
     modules: [
       cards.header('📝 备注（选填）'),
       { type: 'section', text: { type: 'plain-text', content: '直接发送文字填写备注（如：大件/需轻放），或选择无备注。' } },

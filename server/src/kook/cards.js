@@ -10,6 +10,11 @@
  */
 const { maskCode } = require('../utils/helpers');
 
+/* ---------- 随机主题（用户要求卡片颜色随机） ---------- */
+
+const THEMES = ['primary', 'success', 'danger', 'warning', 'info', 'secondary'];
+const randomTheme = () => THEMES[Math.floor(Math.random() * THEMES.length)];
+
 /* ---------- 基础结构 ---------- */
 
 const header = (text) => ({
@@ -305,7 +310,7 @@ const pickCard = (title, items, act, page = 0, pageSize = 4) => {
   if (page > 0) els.push(button('🔄 上一页', 'secondary', `${act}-more`, page - 1));
   return {
     type: 'card',
-    theme: 'info',
+    theme: randomTheme(),
     modules: [header(title), actionGroup(els)],
   };
 };
@@ -408,6 +413,7 @@ const cancelRefundCard = (contactWechat) => ({
 
 module.exports = {
   header,
+  randomTheme,
   encodeBtn,
   decodeBtn,
   hallCard,
