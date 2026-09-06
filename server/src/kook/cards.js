@@ -384,6 +384,7 @@ const cancelRefundCard = (contactWechat) => ({
 });
 
 module.exports = {
+  header,
   encodeBtn,
   decodeBtn,
   hallCard,

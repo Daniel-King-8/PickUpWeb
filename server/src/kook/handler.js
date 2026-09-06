@@ -177,7 +177,7 @@ async function startPublish(token, user) {
       type: 'card',
       theme: 'info',
       modules: [
-        header('🏫 请选择就读校区：'),
+        cards.header('🏫 请选择就读校区：'),
         { type: 'action-group', elements: CAMPUS_OPTIONS.map((c) => ({ type: 'button', theme: 'primary', value: JSON.stringify({ act: 'pick-campus', id: c.val }), click: 'return-val', text: { type: 'plain-text', content: c.label } })) },
       ],
     });
@@ -278,7 +278,7 @@ async function sessionPickupCode(token, user, content) {
       type: 'card',
       theme: 'info',
       modules: [
-        header('确认收货信息'),
+        cards.header('确认收货信息'),
         {
           type: 'section',
           text: { type: 'plain-text', content: '是否使用以上信息直接下单？' },
@@ -330,7 +330,7 @@ async function sessionPhone(token, user, content) {
     type: 'card',
     theme: 'info',
     modules: [
-      header('📝 备注（选填）'),
+      cards.header('📝 备注（选填）'),
       { type: 'section', text: { type: 'plain-text', content: '直接发送文字填写备注（如：大件/需轻放），或选择无备注。' } },
       { type: 'action-group', elements: [{ type: 'button', theme: 'primary', value: JSON.stringify({ act: 'skip-remark' }), click: 'return-val', text: { type: 'plain-text', content: '⏭ 无备注' } }] },
     ],
@@ -422,7 +422,7 @@ async function useSaved(token, user) {
     type: 'card',
     theme: 'info',
     modules: [
-      header('📝 备注（选填）'),
+      cards.header('📝 备注（选填）'),
       { type: 'section', text: { type: 'plain-text', content: '直接发送文字填写备注，或选择无备注。' } },
       { type: 'action-group', elements: [{ type: 'button', theme: 'primary', value: JSON.stringify({ act: 'skip-remark' }), click: 'return-val', text: { type: 'plain-text', content: '⏭ 无备注' } }] },
     ],
@@ -483,10 +483,21 @@ const FAIL_TEXT = {
   NOT_PAYING: '订单状态不是待支付（可能已核销）',
 };
 
+/** Kook 会对同一按钮点击重投事件（同 msg_id），按 msg_id 去重防止重复触发 */
+const processedBtnMsgIds = new Set();
+function isNewBtnMsg(msgId) {
+  if (!msgId) return true;
+  if (processedBtnMsgIds.has(msgId)) return false;
+  processedBtnMsgIds.add(msgId);
+  if (processedBtnMsgIds.size > 800) processedBtnMsgIds.clear(); // 防内存无限增长
+  return true;
+}
+
 async function handleButton(token, clicker, buttons) {
   const FLOW_ACTS = ['publish-start', 'pick-campus', 'pick-station', 'pick-destination', 'use-saved', 'change-info', 'skip-remark', 'confirm-pay', 'upload-shot-yes', 'upload-shot-no', 'cancel-own'];
   const ORDER_ACTS = ['accept', 'deliver', 'confirm', 'mark-paid', 'delete-order'];
   for (const btn of buttons) {
+    if (!isNewBtnMsg(btn.msg_id)) continue;
     const payload = decodeBtn(btn.value);
     if (!payload) continue;
     const { act, id } = payload;
