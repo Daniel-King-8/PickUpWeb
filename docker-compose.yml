@@ -10,7 +10,8 @@ services:
     # host 网络：容器与宿主机共享网络栈，直连 1Panel MySQL(127.0.0.1:3306)
     network_mode: host
     environment:
-      - PORT=3000
+      # 端口可在 .env 覆盖（如服务器想用 18018：.env 写 PORT=18018），默认 3000
+      - PORT=${PORT:-3000}
       # ---------- MySQL（1Panel 创建的 KD 库）----------
       - USE_MYSQL=1
       - DB_HOST=127.0.0.1
