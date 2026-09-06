@@ -130,9 +130,16 @@ async function notifyOrderEvent(transition, orderId) {
 async function doNotifyOrderEvent(transition, orderId) {
   try {
     const cfg = await getKookConfig();
-    if (!cfg.token || !cfg.hallChannelId && !cfg.adminChannelId) return;
+    if (!cfg.token || !cfg.hallChannelId && !cfg.adminChannelId) {
+      console.log(`[kook] 通知跳过：${transition} 订单${orderId}（token 或频道未配置）`);
+      return;
+    }
     const order = await Order.findByPk(orderId);
-    if (!order) return;
+    if (!order) {
+      console.log(`[kook] 通知跳过：${transition} 订单${orderId} 不存在`);
+      return;
+    }
+    console.log(`[kook] 通知：${transition} 订单${orderId}（${order.orderNo}）`);
     // 雇主/跑腿员信息（name = 昵称 || 用户名）
     const { publisherId, runnerId } = order;
     const [publisher, runner] = await Promise.all([
