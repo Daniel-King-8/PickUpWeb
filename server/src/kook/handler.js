@@ -403,8 +403,8 @@ async function askImage(token, user, orderId) {
 }
 
 /** 收到图片（type=2）且处于等待截图 → 下载保存 + 完成；返回是否消费了该图片 */
-async function saveShot(token, user, imageUrl) {
-  const s = getSession(user.kookId);
+async function saveShot(token, kookId, imageUrl) {
+  const s = getSession(kookId);
   if (!s || s.state !== 'awaitScreenshot') return false;
   const { orderId } = s.data;
   try {
@@ -424,8 +424,8 @@ async function saveShot(token, user, imageUrl) {
     console.warn('[kook] 下载付款截图失败:', e.message);
   }
   const order = await Order.findByPk(orderId);
-  if (order) await finishPublish(token, user.kookId, order, true);
-  else endSession(user.kookId);
+  if (order) await finishPublish(token, kookId, order, true);
+  else endSession(kookId);
   return true;
 }
 
