@@ -300,19 +300,17 @@ const orderEntryCard = () => ({
   ],
 });
 
-/** 选项卡（站点/目的地等按钮列表）：每页最多 4 个按钮（Kook 限制），超出自动分页 */
+/** 选项卡（站点/目的地等按钮列表）：分页翻页按钮放独立 action-group（Kook 每个 action-group 最多 4 元素） */
 const pickCard = (title, items, act, page = 0, pageSize = 4) => {
   const slice = (items || []).slice(page * pageSize, (page + 1) * pageSize);
-  const els = slice.map((n) => button(n, 'primary', act, n));
+  const nav = [];
   if ((items || []).length > (page + 1) * pageSize) {
-    els.push(button(`➡ 更多（共 ${items.length} 个）`, 'secondary', `${act}-more`, page + 1));
+    nav.push(button(`➡ 更多（共 ${items.length} 个）`, 'secondary', `${act}-more`, page + 1));
   }
-  if (page > 0) els.push(button('🔄 上一页', 'secondary', `${act}-more`, page - 1));
-  return {
-    type: 'card',
-    theme: randomTheme(),
-    modules: [header(title), actionGroup(els)],
-  };
+  if (page > 0) nav.push(button('🔄 上一页', 'secondary', `${act}-more`, page - 1));
+  const modules = [header(title), actionGroup(slice.map((n) => button(n, 'primary', act, n)))];
+  if (nav.length) modules.push(actionGroup(nav));
+  return { type: 'card', theme: randomTheme(), modules };
 };
 
 /** 付款卡：收款码 + 管理员微信 + 金额 + 【我已确认付款】（按钮置于图片前：私信卡片的按钮在图片之后不渲染） */
