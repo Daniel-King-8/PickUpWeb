@@ -150,10 +150,22 @@ async function doNotifyOrderEvent(transition, orderId) {
     const runName = runner ? runner.nickname || runner.username : '未知用户';
 
     switch (transition) {
-      case 'PAY_UPLOADED': {
-        const shot = await uploadForCard(cfg.token, order.payerScreenshot);
-        const msgId = await sendCard(cfg.token, cfg.adminChannelId, cards.adminCheckCard(order, pubName, publisher ? publisher.uid : '', shot));
+      case 'NEW_ORDER': {
+        // 下单即通知（截图选填）：雇主付款后管理员核对收款记录即可确认
+        const msgId = await sendCard(cfg.token, cfg.adminChannelId, cards.adminCheckCard(order, pubName, publisher ? publisher.uid : '', ''));
         if (msgId) sentCheckCards.set(order.id, { channelId: cfg.adminChannelId, msgId });
+        break;
+      }
+      case 'PAY_UPLOADED': {
+        // 传截图：更新已发的待核对卡片（补上截图）；无记录（如进程重启过）则新发一张
+        const shot = await uploadForCard(cfg.token, order.payerScreenshot);
+        const prev = sentCheckCards.get(order.id);
+        if (prev) {
+          await updateMessage(cfg.token, prev.msgId, JSON.stringify([cards.adminCheckCard(order, pubName, publisher ? publisher.uid : '', shot)]));
+        } else {
+          const msgId = await sendCard(cfg.token, cfg.adminChannelId, cards.adminCheckCard(order, pubName, publisher ? publisher.uid : '', shot));
+          if (msgId) sentCheckCards.set(order.id, { channelId: cfg.adminChannelId, msgId });
+        }
         break;
       }
       case 'PAID': {

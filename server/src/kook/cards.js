@@ -136,7 +136,9 @@ const adminCheckCard = (order, employerName, employerUid, screenshotUrl) => {
   if (screenshotUrl) modules.push(imageGroup([screenshotUrl]));
   modules.push(
     actionGroup([button('✅ 确认到账并发布', 'success', 'mark-paid', order.id)]),
-    context('截图核对无误后点击按钮，订单将自动发布到接单大厅')
+    context(screenshotUrl
+      ? '截图核对无误后点击按钮，订单将自动发布到接单大厅'
+      : '核对收款记录无误即可确认（付款截图可后补，上传后自动显示）')
   );
   return { type: 'card', theme: 'warning', modules };
 };

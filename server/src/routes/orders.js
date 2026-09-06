@@ -92,6 +92,7 @@ module.exports = (ctx) => {
       status: 'PAYING',
       publisherId: req.user.id,
     });
+    kook.notifyOrderEvent('NEW_ORDER', order.id); // 下单即通知管理员待关注（不阻塞响应；截图上传后更新卡片）
     return res.json({ code: 0, data: { orderId: order.id, orderNo: order.orderNo, reward, fee } });
   });
 
