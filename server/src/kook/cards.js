@@ -75,28 +75,45 @@ const decodeBtn = (value) => {
  * 取件码/电话对外脱敏，点击「抢单」后跑腿员 DM 里才是明文
  * 注意：文本一律用 plain-text 段落（kmarkdown 加粗在专名/emoji 场景曾渲染乱码）
  */
-const hallCard = (order, employerName) => ({
-  type: 'card',
-  theme: 'success',
-  modules: [
-    header(`💰 新悬赏待接单 · ¥${Number(order.reward).toFixed(2)}`),
-    {
-      type: 'section',
-      text: {
-        type: 'plain-text',
-        content: [
-          `订单号：${order.orderNo}`,
-          `前往地点：${order.station}`,
-          `目的地：${order.deliverPlace}`,
-          `取件码：${maskCode(order.pickupCode)}（抢单后可见）`,
-          `联系电话：${maskCode(order.contactPhone)}`,
-          `雇主：${employerName}`,
-        ].join('\n'),
-      },
-    },
-    actionGroup([button('⚡ 抢单', 'primary', 'accept', order.id)]),
-  ],
-});
+const hallCard = (order, employerName) => {
+  const lines = [
+    `订单号：${order.orderNo}`,
+    `前往地点：${order.station}`,
+    `目的地：${order.deliverPlace}`,
+    `取件码：${maskCode(order.pickupCode)}（抢单后可见）`,
+    `联系电话：${maskCode(order.contactPhone)}`,
+    `雇主：${employerName}`,
+  ];
+  if (order.remark) lines.push(`备注：${order.remark}`);
+  return {
+    type: 'card',
+    theme: 'success',
+    modules: [
+      header(`💰 新悬赏待接单 · ¥${Number(order.reward).toFixed(2)}`),
+      { type: 'section', text: { type: 'plain-text', content: lines.join('\n') } },
+      actionGroup([button('⚡ 抢单', 'primary', 'accept', order.id)]),
+    ],
+  };
+};
+
+/** 已被接单的大厅卡片（message/update 替换旧卡用：抢单按钮随之消失） */
+const hallTakenCard = (order, runnerName) => {
+  const lines = [
+    `订单号：${order.orderNo}`,
+    `前往地点：${order.station}`,
+    `目的地：${order.deliverPlace}`,
+    `已由 ${runnerName} 抢单，等待送达中`,
+  ];
+  if (order.remark) lines.push(`备注：${order.remark}`);
+  return {
+    type: 'card',
+    theme: 'info',
+    modules: [
+      header(`🛵 已被接单 · ¥${Number(order.reward).toFixed(2)}`),
+      { type: 'section', text: { type: 'plain-text', content: lines.join('\n') } },
+    ],
+  };
+};
 
 /**
  * 订单待确定频道卡片：管理员核对付款截图，点「确认到账」→ 订单进大厅
@@ -213,6 +230,7 @@ module.exports = {
   encodeBtn,
   decodeBtn,
   hallCard,
+  hallTakenCard,
   adminCheckCard,
   adminConfirmedCard,
   runnerAcceptedCard,

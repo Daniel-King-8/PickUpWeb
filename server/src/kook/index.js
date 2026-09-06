@@ -17,6 +17,8 @@ const cards = require('./cards');
 
 /** 已发送的"待核对"卡片索引：orderId -> { channelId, msgId }，被确认后更新为"已确认"占位卡 */
 const sentCheckCards = new Map();
+/** 已发送的"大厅"卡片索引：orderId -> { channelId, msgId }，被抢单后更新为"已被接单" */
+const sentHallCards = new Map();
 
 /** 启动：注册事件处理器 + 注入 Bot 自身 id（过滤自消息）+ 连接 */
 async function start() {
@@ -146,10 +148,18 @@ async function notifyOrderEvent(transition, orderId) {
           await updateMessage(cfg.token, prev.msgId, JSON.stringify([cards.adminConfirmedCard(order)]));
           sentCheckCards.delete(order.id);
         }
-        await sendCard(cfg.token, cfg.hallChannelId, cards.hallCard(order, pubName));
+        // 大厅卡片（记录 msg_id，供抢单后更新为"已被接单"）
+        const hallMsgId = await sendCard(cfg.token, cfg.hallChannelId, cards.hallCard(order, pubName));
+        if (hallMsgId) sentHallCards.set(order.id, { channelId: cfg.hallChannelId, msgId: hallMsgId });
         break;
       }
       case 'ACCEPTED': {
+        // 更新大厅卡片 → 「已被接单」（抢单按钮消失）
+        const hall = sentHallCards.get(order.id);
+        if (hall) {
+          await updateMessage(cfg.token, hall.msgId, JSON.stringify([cards.hallTakenCard(order, runName)]));
+          sentHallCards.delete(order.id);
+        }
         await dmCard(cfg.token, runner, cards.runnerAcceptedCard(order, pubName));
         await dmCard(cfg.token, publisher, cards.employerAcceptedCard(order, runName));
         break;
