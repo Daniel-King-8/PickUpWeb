@@ -114,15 +114,6 @@ module.exports = (ctx) => {
     if (user.isHunter) return res.status(400).json({ code: 400, message: '你已经是赏金猎人了' });
     if (user.hunterApplyAt) return res.status(400).json({ code: 400, message: '已提交申请，请等待管理员审核' });
     await user.update({ hunterApplyAt: new Date() });
-    // 出站事件：猎头申请待审批
-    const { emitEvent } = require('../utils/events');
-    await emitEvent({
-      type: 'hunter.apply',
-      title: '🐺 赏金猎人申请待审批',
-      content: `申请人 ${user.nickname || user.username}(${user.uid}) · ${user.phone || '未留电话'} · 待审批`,
-      orderNo: '',
-      orderId: null,
-    });
     return res.json({ code: 0, data: publicUser(user) });
   });
 

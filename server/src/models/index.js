@@ -87,37 +87,6 @@ const Settlement = db.define(
   { tableName: 'settlements' }
 );
 
-/** 出站事件队列（Hermes 拉取播报；status=pending 未播报 / done 已播报） */
-const Event = db.define(
-  'events',
-  {
-    id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
-    type: { type: DataTypes.STRING(50), allowNull: false }, // order.pending_payment 等
-    title: { type: DataTypes.STRING(100), defaultValue: '' },
-    content: { type: DataTypes.STRING(255), defaultValue: '' },
-    orderNo: { type: DataTypes.STRING(32), defaultValue: '' },
-    orderId: { type: DataTypes.INTEGER, allowNull: true },
-    payloadJson: { type: DataTypes.TEXT, defaultValue: '{}' }, // attachments 等附加字段
-    status: { type: DataTypes.ENUM('pending', 'done'), defaultValue: 'pending' },
-    ackedAt: { type: DataTypes.DATE, allowNull: true },
-    createTime: { type: DataTypes.DATE, allowNull: true },
-  },
-  { tableName: 'events' }
-);
-
-/** Agent 操作审计（Hermes 执行 mark-paid 等留痕） */
-const AgentLog = db.define(
-  'agent_logs',
-  {
-    id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
-    action: { type: DataTypes.STRING(50), allowNull: false },
-    orderId: { type: DataTypes.INTEGER, allowNull: true },
-    detail: { type: DataTypes.STRING(200), defaultValue: '' },
-    createTime: { type: DataTypes.DATE, allowNull: true },
-  },
-  { tableName: 'agent_logs' }
-);
-
 /** 系统设置（费率规则、抽成比例等，key-value） */
 const Setting = db.define(
   'settings',
@@ -129,4 +98,4 @@ const Setting = db.define(
   { tableName: 'settings' }
 );
 
-module.exports = { User, Order, Settlement, Setting, Event, AgentLog };
+module.exports = { User, Order, Settlement, Setting };

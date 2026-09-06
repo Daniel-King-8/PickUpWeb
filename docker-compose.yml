@@ -20,8 +20,6 @@ services:
       - DB_PASSWORD=kdkdkd
       # 图片上传目录（挂宿主机卷持久化）
       - UPLOAD_DIR=/data/uploads
-      # 公网域名（Hermes 拉取支付截图用；与 Cloudflare 隧道域名一致）
-      - PUBLIC_BASE_URL=https://kd.treasurefind.org
       # 【必改】管理员初始密码（首次启动创建 admin 账号用）
       - ADMIN_PASSWORD=Wyc50818
       # 【必改】JWT 密钥，换成一串随机字符

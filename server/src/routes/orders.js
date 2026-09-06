@@ -14,12 +14,6 @@ const express = require('express');
 const { Order, Setting, User } = require('../models');
 const { uploadImage } = require('../middleware/upload');
 const { maskCode, generateOrderNo, calcFee } = require('../utils/helpers');
-const { emitEvent } = require('../utils/events');
-
-/** 公网域名（Hermes 拉图用），环境变量注入 */
-function publicBase() {
-  return process.env.PUBLIC_BASE_URL || 'http://127.0.0.1:18018';
-}
 
 module.exports = (ctx) => {
   const router = express.Router();
@@ -85,15 +79,6 @@ module.exports = (ctx) => {
       fee,
       status: 'PAYING',
       publisherId: req.user.id,
-    });
-    // 出站事件：新悬赏待核对（Hermes → 飞书群）
-    await emitEvent({
-      type: 'order.pending_payment',
-      title: '🆕 新悬赏待核对',
-      content: `雇主 ${user.nickname || user.username}(${user.uid}) · ¥${reward.toFixed(2)} · ${order.station} · 送至 ${order.deliverPlace}`,
-      orderNo: order.orderNo,
-      orderId: order.id,
-      attachments: [],
     });
     return res.json({ code: 0, data: { orderId: order.id, orderNo: order.orderNo, reward, fee } });
   });
@@ -191,15 +176,6 @@ module.exports = (ctx) => {
       return res.status(403).json({ code: 403, message: '无权限操作该订单' });
     }
     await order.update({ payerScreenshot: `/uploads/${req.file.filename}` });
-    // 事件合并：给待核对事件补上支付截图（未播报则更新，已播报则新增一条）
-    await emitEvent({
-      type: 'order.pending_payment',
-      title: '🆕 新悬赏待核对（含支付截图）',
-      content: `${order.orderNo} · ¥${order.reward.toFixed(2)} · ${order.station} · 送至 ${order.deliverPlace}`,
-      orderNo: order.orderNo,
-      orderId: order.id,
-      attachments: [{ name: '支付截图', url: `${publicBase()}${order.payerScreenshot}` }],
-    });
     return res.json({ code: 0, data: { screenshot: order.payerScreenshot } });
   });
 
@@ -226,14 +202,6 @@ module.exports = (ctx) => {
     if (affected !== 1) {
       return res.status(400).json({ code: 400, message: '手慢了，订单已被接走' });
     }
-    // 事件：悬赏被接单
-    await emitEvent({
-      type: 'order.accepted',
-      title: '📦 悬赏被接单',
-      content: `${order.orderNo} · 跑腿员已接单，火速取件中`,
-      orderNo: order.orderNo,
-      orderId: order.id,
-    });
     return res.json({ code: 0, data: { success: true } });
   });
 
@@ -253,13 +221,6 @@ module.exports = (ctx) => {
     if (affected !== 1) {
       return res.status(400).json({ code: 400, message: '当前状态不允许操作' });
     }
-    await emitEvent({
-      type: 'order.delivered',
-      title: '🚚 已送达，待雇主确认',
-      content: `${order.orderNo} · 跑腿员已完成配送，等待雇主确认收货`,
-      orderNo: order.orderNo,
-      orderId: order.id,
-    });
     return res.json({ code: 0, data: { success: true } });
   });
 
@@ -277,13 +238,6 @@ module.exports = (ctx) => {
     if (affected !== 1) {
       return res.status(400).json({ code: 400, message: '当前状态不允许操作' });
     }
-    await emitEvent({
-      type: 'order.confirmed',
-      title: '✅ 悬赏已完成',
-      content: `${order.orderNo} · 雇主已确认收货，本单完美收官`,
-      orderNo: order.orderNo,
-      orderId: order.id,
-    });
     return res.json({ code: 0, data: { success: true } });
   });
 
