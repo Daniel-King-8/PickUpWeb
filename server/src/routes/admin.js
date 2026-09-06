@@ -446,6 +446,12 @@ module.exports = (ctx) => {
     return res.json({ code: 0, data: { success: true } });
   });
 
+  /** 强制重连 Kook WS（保活/手动校验用） */
+  router.post('/kook/reconnect', async (req, res) => {
+    await kook.reconnectNow();
+    return res.json({ code: 0, data: { success: true } });
+  });
+
   /**
    * 强制代绑/解绑用户 Kook（绑定改由用户自助，此处供管理员处理异常）
    * body: { kookId } —— 空字符串解绑；Kook 用户 id 为纯数字

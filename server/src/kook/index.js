@@ -37,6 +37,8 @@ async function start() {
   await client.start();
   // 配置了下单频道则发布一条固定入口卡（重启会重复发送，频道内旧卡可手动删除）
   await sendOrderEntry();
+  // 保活：定时强制重连（默认 12 小时，环境变量 KOOK_RECONNECT_HOURS 可调，0=禁用）
+  scheduleReconnectKeepAlive();
 }
 
 /** 向「下单频道」发送下单入口卡（重启自动/后台可手动触发） */
@@ -51,6 +53,30 @@ async function sendOrderEntry() {
     console.warn('[kook] 发送下单入口卡失败:', e.message);
     return false;
   }
+}
+
+/**
+ * 保活：Kook 网关长期连接可能被服务端静默清理（"掉线"），
+ * 每 KOOK_RECONNECT_HOURS 小时（默认 12，0=禁用）强制断线重连一次，
+ * 会话通过 resume 机制无缝恢复（丢失消息自动补发）。
+ */
+function scheduleReconnectKeepAlive() {
+  const hours = Number(process.env.KOOK_RECONNECT_HOURS || 12);
+  if (!(hours > 0)) {
+    console.log('[kook] 定时重连已禁用（KOOK_RECONNECT_HOURS=0）');
+    return;
+  }
+  const intervalMs = hours * 3600 * 1000;
+  setInterval(async () => {
+    console.log(`[kook] 保活重连（已运行约 ${hours} 小时，强制重建会话）`);
+    await reconnectNow();
+  }, intervalMs);
+}
+
+/** 立即重连（保活定时器与后台「重新连接」按钮共用） */
+async function reconnectNow() {
+  client.stop();
+  await start();
 }
 
 /** 优雅停止（进程退出时） */
@@ -257,4 +283,4 @@ async function doNotifyOrderEvent(transition, data) {
   }
 }
 
-module.exports = { start, stop, createBindCode, status, sendTest, sendOrderEntry, notifyOrderEvent };
+module.exports = { start, stop, createBindCode, status, sendTest, sendOrderEntry, reconnectNow, notifyOrderEvent };

@@ -31,6 +31,8 @@ services:
       - KOOK_HALL_CHANNEL_ID=${KOOK_HALL_CHANNEL_ID:-}
       - KOOK_ADMIN_CHANNEL_ID=${KOOK_ADMIN_CHANNEL_ID:-}
       - KOOK_ORDER_CHANNEL_ID=${KOOK_ORDER_CHANNEL_ID:-}
+      # 保活重连间隔（小时，默认 12，0=禁用）
+      - KOOK_RECONNECT_HOURS=${KOOK_RECONNECT_HOURS:-12}
       # 时区：按中国时间切"每日结算"
       - TZ=Asia/Shanghai
     volumes:

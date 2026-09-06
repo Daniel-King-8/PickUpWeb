@@ -366,6 +366,8 @@
         <div class="kook-help">测试成功后：用户在网站下单并上传付款截图 → 机器人自动在「订单待确定」发卡片 → 点【确认到账并发布】→ 订单出现在「接单大厅」</div>
         <van-button round block plain type="primary" :loading="kookEntrySending" @click="sendKookEntry" class="mt-2">向「下单频道」发送下单入口卡</van-button>
         <div class="kook-help">入口卡带【🎯 下单】按钮：用户点按钮后，机器人私信逐步引导完成下单（站点→取件码→目的地→付款），无需再上网页</div>
+        <van-button round block plain type="warning" :loading="kookReconnecting" @click="reconnectKook" class="mt-2">🔄 重新连接机器人（掉线/改配置后点此）</van-button>
+        <div class="kook-help">机器人每 12 小时会自动保活重连一次（环境变量 KOOK_RECONNECT_HOURS 可调，0 禁用）；手动点此随时重建连接</div>
       </van-cell-group>
 
       <!-- 绑定当前管理员账号（管理员无「我的」页，绑定入口放后台） -->
@@ -652,6 +654,7 @@ async function saveContact() {
 const kookStatus = ref({});
 const kookTesting = ref(false);
 const kookEntrySending = ref(false);
+const kookReconnecting = ref(false);
 // 当前管理员 Kook 绑定（管理员无「我的」页，绑定入口放后台）
 const adminKookBound = ref(false);
 const adminKookId = ref('');
@@ -720,6 +723,16 @@ async function sendKookEntry() {
     showSuccessToast('下单入口卡已发送，请到「下单频道」查看');
   } finally {
     kookEntrySending.value = false;
+  }
+}
+
+async function reconnectKook() {
+  kookReconnecting.value = true;
+  try {
+    await api.post('/admin/kook/reconnect');
+    showSuccessToast('已重新连接，稍后刷新状态卡查看 WS 状态');
+  } finally {
+    kookReconnecting.value = false;
   }
 }
 
