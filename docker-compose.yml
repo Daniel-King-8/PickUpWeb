@@ -33,6 +33,9 @@ services:
       - KOOK_ORDER_CHANNEL_ID=${KOOK_ORDER_CHANNEL_ID:-}
       # 保活重连间隔（小时，默认 12，0=禁用）
       - KOOK_RECONNECT_HOURS=${KOOK_RECONNECT_HOURS:-12}
+      # 保活测试频道（后台可配，定时发"在线"消息）与间隔分钟
+      - KOOK_KEEPALIVE_CHANNEL_ID=${KOOK_KEEPALIVE_CHANNEL_ID:-}
+      - KOOK_KEEPALIVE_MINUTES=${KOOK_KEEPALIVE_MINUTES:-60}
       # 时区：按中国时间切"每日结算"
       - TZ=Asia/Shanghai
     volumes:

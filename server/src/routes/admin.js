@@ -452,6 +452,13 @@ module.exports = (ctx) => {
     return res.json({ code: 0, data: { success: true } });
   });
 
+  /** 立即向保活测试频道发送一次"在线"消息（验证机器人存活） */
+  router.post('/kook/send-keepalive', async (req, res) => {
+    const result = await kook.sendKeepAlive();
+    if (!result) return res.status(400).json({ code: 400, message: '发送失败：检查保活频道配置' });
+    return res.json({ code: 0, data: { success: true } });
+  });
+
   /**
    * 强制代绑/解绑用户 Kook（绑定改由用户自助，此处供管理员处理异常）
    * body: { kookId } —— 空字符串解绑；Kook 用户 id 为纯数字

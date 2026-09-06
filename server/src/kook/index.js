@@ -12,7 +12,7 @@ const { Order, User } = require('../models');
 const { getKookConfig, enabled } = require('./config');
 const client = require('./client');
 const handler = require('./handler');
-const { sendMessage, sendDirectMessage, updateMessage, uploadAsset, getMe } = require('./api');
+const { sendMessage, sendDirectMessage, updateMessage, deleteMessage, uploadAsset, getMe } = require('./api');
 const cards = require('./cards');
 
 /** 已发送的"待核对"卡片索引：orderId -> { channelId, msgId }，被确认后更新为"已确认"占位卡 */
@@ -39,6 +39,8 @@ async function start() {
   await sendOrderEntry();
   // 保活：定时强制重连（默认 12 小时，环境变量 KOOK_RECONNECT_HOURS 可调，0=禁用）
   scheduleReconnectKeepAlive();
+  // 保活消息：定时向后台指定的测试频道发送"在线"消息（频道/间隔后台可配）
+  await scheduleKeepAlive();
 }
 
 /** 向「下单频道」发送下单入口卡（重启自动/后台可手动触发） */
@@ -53,6 +55,50 @@ async function sendOrderEntry() {
     console.warn('[kook] 发送下单入口卡失败:', e.message);
     return false;
   }
+}
+
+/* ================= 保活：定时发送"在线"测试消息 ================= */
+
+let keepAliveTimer = null;
+let keepAliveLastMsgId = null;
+
+/**
+ * 向后台指定的「保活测试频道」发送一条"机器人在线"消息：
+ * 每次发送前自动删除上一条（频道内始终只有最新一条，一眼看出最后在线时间）。
+ * 频道 ID 与间隔由用户在后台「Kook 对接」配置（kookKeepAliveChannelId/kookKeepAliveMinutes）。
+ * @returns {Promise<boolean>}
+ */
+async function sendKeepAlive() {
+  try {
+    const cfg = await getKookConfig();
+    if (!cfg.token || !cfg.keepAliveChannelId) return false;
+    if (keepAliveLastMsgId) {
+      await deleteMessage(cfg.token, keepAliveLastMsgId); // 清理上一条（失败忽略，下一条仍发）
+      keepAliveLastMsgId = null;
+    }
+    const msgId = await sendMessage(cfg.token, cfg.keepAliveChannelId, 1, `🟢 机器人在线（${cnNow()}）`);
+    keepAliveLastMsgId = msgId;
+    console.log('[kook] 保活消息已发送，机器人在线');
+    return !!msgId;
+  } catch (e) {
+    console.warn('[kook] 保活消息发送失败:', e.message);
+    return false;
+  }
+}
+
+/** 按配置的间隔启动保活定时器（后台改配置后点「重新连接」即重启定时器） */
+async function scheduleKeepAlive() {
+  clearInterval(keepAliveTimer);
+  const cfg = await getKookConfig();
+  if (!cfg.token || !cfg.keepAliveChannelId) return; // 未配置保活频道 → 不启用
+  const minutes = Math.max(1, cfg.keepAliveMinutes || 60);
+  keepAliveTimer = setInterval(() => sendKeepAlive(), minutes * 60 * 1000);
+  console.log(`[kook] 保活消息已启用：每 ${minutes} 分钟向 ${cfg.keepAliveChannelId} 发送在线测试`);
+}
+
+/** 北京时间（秒级，用于保活消息时间戳） */
+function cnNow() {
+  return new Date(Date.now() + 8 * 3600 * 1000).toISOString().replace('T', ' ').slice(0, 19);
 }
 
 /**
@@ -100,6 +146,8 @@ async function status() {
     hallChannelId: cfg.hallChannelId,
     adminChannelId: cfg.adminChannelId,
     orderChannelId: cfg.orderChannelId,
+    keepAliveChannelId: cfg.keepAliveChannelId,
+    keepAliveMinutes: cfg.keepAliveMinutes,
     bindCodeCount: handler.bindCodeCount(),
     ...client.status(),
   };
@@ -283,4 +331,4 @@ async function doNotifyOrderEvent(transition, data) {
   }
 }
 
-module.exports = { start, stop, createBindCode, status, sendTest, sendOrderEntry, reconnectNow, notifyOrderEvent };
+module.exports = { start, stop, createBindCode, status, sendTest, sendOrderEntry, sendKeepAlive, reconnectNow, notifyOrderEvent };

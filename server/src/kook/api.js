@@ -108,6 +108,17 @@ async function updateMessage(token, msgId, content) {
   return !!res;
 }
 
+/** 删除频道消息（保活消息自清理用，频道保留最新一条） */
+async function deleteMessage(token, msgId) {
+  if (!msgId) return false;
+  const res = await request(token, '/message/delete', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ msg_id: msgId }),
+  });
+  return !!res;
+}
+
 /** 获取当前 Bot 自身信息（用于过滤自己发的事件，避免自回复） */
 async function getMe(token) {
   const res = await request(token, '/user/me');
@@ -131,4 +142,4 @@ async function uploadLocalAsset(token, url) {
   }
 }
 
-module.exports = { getGateway, sendMessage, sendDirectMessage, updateMessage, uploadAsset, uploadLocalAsset, getMe };
+module.exports = { getGateway, sendMessage, sendDirectMessage, updateMessage, deleteMessage, uploadAsset, uploadLocalAsset, getMe };

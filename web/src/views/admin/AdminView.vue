@@ -355,6 +355,8 @@
         <van-field v-model="kookForm.hallChannelId" label="接单大厅频道 id" placeholder="#接单大厅 的频道 id" />
         <van-field v-model="kookForm.adminChannelId" label="订单待确定频道 id" placeholder="#订单待确定 的频道 id" />
         <van-field v-model="kookForm.orderChannelId" label="下单频道 id" placeholder="#下单频道（机器人发布下单入口卡，用户点按钮私信交互下单）" />
+        <van-field v-model="kookForm.keepAliveChannelId" label="保活测试频道 id" placeholder="机器人定时在此发「🟢 在线」测试（可用「公告」等不用的频道）" />
+        <van-field v-model="kookForm.keepAliveMinutes" type="digit" label="保活间隔(分钟)" placeholder="默认 60" />
         <van-button class="save-btn" round block type="primary" @click="saveKookConfig">保存配置</van-button>
         <div class="kook-help">
           📌 使用步骤：Kook 开发者中心创建机器人并拿到 Token → 邀请机器人进你的服务器 → 右键子频道复制 ID（开发者中心「频道管理」可见）→ 保存配置 → 点下方测试
@@ -368,6 +370,8 @@
         <div class="kook-help">入口卡带【🎯 下单】按钮：用户点按钮后，机器人私信逐步引导完成下单（站点→取件码→目的地→付款），无需再上网页</div>
         <van-button round block plain type="warning" :loading="kookReconnecting" @click="reconnectKook" class="mt-2">🔄 重新连接机器人（掉线/改配置后点此）</van-button>
         <div class="kook-help">机器人每 12 小时会自动保活重连一次（环境变量 KOOK_RECONNECT_HOURS 可调，0 禁用）；手动点此随时重建连接</div>
+        <van-button round block plain type="success" :loading="kookKeepAliveSending" @click="sendKeepAliveNow" class="mt-2">📡 立即发送"在线"测试消息</van-button>
+        <div class="kook-help">向「保活测试频道」（上方配置）发一条 🟢 在线消息，验证机器人存活；保存配置后此功能按间隔自动定时发送，每次自动删旧消息只留最新一条</div>
       </van-cell-group>
 
       <!-- 绑定当前管理员账号（管理员无「我的」页，绑定入口放后台） -->
@@ -655,6 +659,7 @@ const kookStatus = ref({});
 const kookTesting = ref(false);
 const kookEntrySending = ref(false);
 const kookReconnecting = ref(false);
+const kookKeepAliveSending = ref(false);
 // 当前管理员 Kook 绑定（管理员无「我的」页，绑定入口放后台）
 const adminKookBound = ref(false);
 const adminKookId = ref('');
@@ -680,7 +685,7 @@ async function adminUnbindKook() {
   loadAdminKook();
 }
 // token 不回显明文（password 输入框留空不修改），其余配置回显
-const kookForm = reactive({ token: '', guildId: '', hallChannelId: '', adminChannelId: '', orderChannelId: '' });
+const kookForm = reactive({ token: '', guildId: '', hallChannelId: '', adminChannelId: '', orderChannelId: '', keepAliveChannelId: '', keepAliveMinutes: '' });
 
 async function loadKookStatus() {
   const res = await api.get('/admin/kook/status');
@@ -689,6 +694,8 @@ async function loadKookStatus() {
   kookForm.hallChannelId = res.data.hallChannelId || '';
   kookForm.adminChannelId = res.data.adminChannelId || '';
   kookForm.orderChannelId = res.data.orderChannelId || '';
+  kookForm.keepAliveChannelId = res.data.keepAliveChannelId || '';
+  kookForm.keepAliveMinutes = res.data.keepAliveMinutes ? String(res.data.keepAliveMinutes) : '';
 }
 
 /** 保存配置：token 留空则跳过不改动；频道 id 允许清空 */
@@ -701,6 +708,8 @@ async function saveKookConfig() {
   saves.push(api.put('/admin/settings', { key: 'kookHallChannelId', value: kookForm.hallChannelId.trim() }));
   saves.push(api.put('/admin/settings', { key: 'kookAdminChannelId', value: kookForm.adminChannelId.trim() }));
   saves.push(api.put('/admin/settings', { key: 'kookOrderChannelId', value: kookForm.orderChannelId.trim() }));
+  saves.push(api.put('/admin/settings', { key: 'kookKeepAliveChannelId', value: kookForm.keepAliveChannelId.trim() }));
+  saves.push(api.put('/admin/settings', { key: 'kookKeepAliveMinutes', value: String(kookForm.keepAliveMinutes || 60) }));
   await Promise.all(saves);
   showSuccessToast('Kook 配置已保存');
   loadKookStatus();
@@ -733,6 +742,16 @@ async function reconnectKook() {
     showSuccessToast('已重新连接，稍后刷新状态卡查看 WS 状态');
   } finally {
     kookReconnecting.value = false;
+  }
+}
+
+async function sendKeepAliveNow() {
+  kookKeepAliveSending.value = true;
+  try {
+    await api.post('/admin/kook/send-keepalive');
+    showSuccessToast('在线消息已发送，请到测试频道查看');
+  } finally {
+    kookKeepAliveSending.value = false;
   }
 }
 

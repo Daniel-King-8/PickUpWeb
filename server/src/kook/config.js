@@ -17,6 +17,8 @@ const KEYS = {
   hall: 'kookHallChannelId',
   admin: 'kookAdminChannelId',
   order: 'kookOrderChannelId',
+  keepAlive: 'kookKeepAliveChannelId', // 保活测试频道（后台填写，机器人定时发"在线"消息）
+  keepAliveMinutes: 'kookKeepAliveMinutes', // 保活间隔分钟（默认 60）
 };
 
 /**
@@ -35,6 +37,8 @@ async function getKookConfig() {
     hallChannelId: map[KEYS.hall] || process.env.KOOK_HALL_CHANNEL_ID || '',
     adminChannelId: map[KEYS.admin] || process.env.KOOK_ADMIN_CHANNEL_ID || '',
     orderChannelId: map[KEYS.order] || process.env.KOOK_ORDER_CHANNEL_ID || '',
+    keepAliveChannelId: map[KEYS.keepAlive] || process.env.KOOK_KEEPALIVE_CHANNEL_ID || '',
+    keepAliveMinutes: Number(map[KEYS.keepAliveMinutes] || process.env.KOOK_KEEPALIVE_MINUTES || 60),
   };
 }
 
