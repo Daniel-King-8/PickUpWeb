@@ -354,6 +354,23 @@
         <van-button round block plain type="primary" :loading="kookTesting" @click="testKook">向「订单待确定」频道发送测试消息</van-button>
         <div class="kook-help">测试成功后：用户在网站下单并上传付款截图 → 机器人自动在「订单待确定」发卡片 → 点【确认到账并发布】→ 订单出现在「接单大厅」</div>
       </van-cell-group>
+
+      <!-- 绑定当前管理员账号（管理员无「我的」页，绑定入口放后台） -->
+      <van-cell-group inset title="绑定当前管理员账号" class="mt-3">
+        <template v-if="adminKookBound">
+          <van-cell title="当前账号已绑定 Kook" :value="adminKookId" />
+          <van-button class="save-btn" round block plain type="danger" @click="adminUnbindKook">解除绑定</van-button>
+        </template>
+        <template v-else>
+          <div v-if="adminBindCode" class="kook-code-small-wrap">
+            <div class="kook-code-small">{{ adminBindCode }}</div>
+            <div class="kook-help">打开 Kook，私聊机器人发送：<b>绑定 {{ adminBindCode }}</b>（10 分钟内有效，回复即完成绑定）</div>
+          </div>
+          <van-button class="save-btn" round block plain type="primary" @click="genAdminBindCode">
+            {{ adminBindCode ? '重新生成绑定码' : '生成绑定码（我的 Kook 绑定）' }}
+          </van-button>
+        </template>
+      </van-cell-group>
     </div>
   </div>
 </template>
@@ -609,6 +626,30 @@ async function saveContact() {
 /* ---------- Kook 对接 ---------- */
 const kookStatus = ref({});
 const kookTesting = ref(false);
+// 当前管理员 Kook 绑定（管理员无「我的」页，绑定入口放后台）
+const adminKookBound = ref(false);
+const adminKookId = ref('');
+const adminBindCode = ref('');
+
+async function loadAdminKook() {
+  const res = await api.get('/kook/status');
+  adminKookBound.value = res.data.bound;
+  adminKookId.value = res.data.kookId;
+  if (adminKookBound.value) adminBindCode.value = '';
+}
+
+async function genAdminBindCode() {
+  const res = await api.post('/kook/bind-code');
+  adminBindCode.value = res.data.code;
+  showSuccessToast(`绑定码已生成：请私聊 Kook 机器人发送「绑定 ${res.data.code}」`);
+}
+
+async function adminUnbindKook() {
+  await showConfirmDialog({ title: '解除绑定', message: '确认解除当前管理员账号的 Kook 绑定？', confirmText: '解绑' });
+  await api.post('/kook/unbind');
+  showSuccessToast('已解绑');
+  loadAdminKook();
+}
 // token 不回显明文（password 输入框留空不修改），其余配置回显
 const kookForm = reactive({ token: '', guildId: '', hallChannelId: '', adminChannelId: '' });
 
@@ -790,7 +831,10 @@ watch(tab, () => {
     loadUsers();
     loadHunterApps();
   }
-  if (tab.value === 'kook') loadKookStatus();
+  if (tab.value === 'kook') {
+    loadKookStatus();
+    loadAdminKook();
+  }
 });
 
 onMounted(() => {
@@ -1120,5 +1164,20 @@ onMounted(() => {
   font-size: 12px;
   color: #64748b;
   line-height: 1.6;
+}
+.kook-code-small-wrap {
+  text-align: center;
+  padding-top: 10px;
+}
+.kook-code-small {
+  font-size: 28px;
+  font-weight: 800;
+  letter-spacing: 6px;
+  color: #0f172a;
+  margin: 0 16px 4px;
+  background: #ecfdf5;
+  border-radius: 10px;
+  padding: 8px 0;
+  border: 1px dashed #6ee7b7;
 }
 </style>

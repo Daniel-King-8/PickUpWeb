@@ -200,6 +200,11 @@ async function routeEvent(event) {
     const content = String(event.content || '').trim();
     const m = content.match(/^绑定\s*(\d{6})$/);
     if (m) {
+      // 仅限私聊绑定（频道内绑定易被他人关注，改私信统一入口）
+      if (channel_type !== 'PERSON') {
+        await dm(cfg.token, author_id, '绑定请私聊机器人发送「绑定 123456」完成（频道内发送不生效）');
+        return;
+      }
       await handleBind(cfg.token, author_id, m[1]);
       return;
     }
