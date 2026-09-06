@@ -326,6 +326,13 @@ async function sessionPhone(token, user, content) {
   const s = getSession(user.kookId);
   if (!s || s.state !== 'inputPhone') return;
   s.data.phone = content.slice(0, 20);
+  await askRewardInput(token, user);
+}
+
+/** 每次下单必填悬赏金额（低于最低价自动提示重新输入） */
+async function askRewardInput(token, user) {
+  const s = getSession(user.kookId);
+  if (!s) return;
   s.state = 'inputReward';
   const min = 1 + Number(s.data.feeRules.platformFee || 0);
   await dm(token, user.kookId, `💰 请输入悬赏金额（最低 ¥${min.toFixed(2)}，可加价加速接单，最高 500）：`);
@@ -443,9 +450,8 @@ async function useSaved(token, user) {
   s.data.destination = s.data.saved.deliverPlace;
   s.data.detail = '';
   s.data.phone = s.data.saved.contactPhone;
-  s.state = 'askRemark';
   s.data.remark = '';
-  await askRemarkCard(token, user);
+  await askRewardInput(token, user); // 每次下单同样必填悬赏金额
 }
 
 /** 分页换页：重新发送一页选项卡（更多/上一页按钮共用） */
