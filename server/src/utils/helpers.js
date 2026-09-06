@@ -49,4 +49,29 @@ function calcFee(rules) {
   return { reward, fee, detail: `基础 ¥1 + 平台费 ¥${fee.toFixed(2)}(平台收取)` };
 }
 
-module.exports = { maskCode, generateOrderNo, generateUid, cnToday, parseTowerNo, calcFee };
+/**
+ * 费率规则标准化（旧结构 → 新结构，按校区兼容）：
+ * 旧：{ stations: {驿站名:true}, towerRules: [{from,to,extra}], commission: {value} }
+ * 新：{ platformFee, stations: [名称], destinations: [名称] }
+ * 新建库即新结构；旧库升级后由本函数在读取时统一转换，无需数据迁移。
+ */
+function normalizeFeeRules(data, campus) {
+  if (!data) return null;
+  let rules = data.campuses ? data.campuses[campus] || data.campuses.scyz || null : data;
+  if (!rules) return null;
+  const r = { ...rules };
+  if (r.platformFee == null) {
+    r.platformFee = r.commission && r.commission.value != null ? r.commission.value : 1.5;
+  }
+  if (!Array.isArray(r.stations)) {
+    r.stations = r.stations ? Object.keys(r.stations) : [];
+  }
+  if (!Array.isArray(r.destinations)) {
+    r.destinations = (r.towerRules || []).map((t) =>
+      t.from === t.to ? `${t.from}号楼` : `${t.from}-${t.to}号楼`
+    );
+  }
+  return r;
+}
+
+module.exports = { maskCode, generateOrderNo, generateUid, cnToday, parseTowerNo, calcFee, normalizeFeeRules };

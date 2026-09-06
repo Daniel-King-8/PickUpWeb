@@ -24,6 +24,11 @@ services:
       - ADMIN_PASSWORD=Wyc50818
       # 【必改】JWT 密钥，换成一串随机字符
       - JWT_SECRET=KingKing
+      # ---------- Kook 机器人（可选；也可在管理后台「Kook 对接」页配置，后台保存优先）----------
+      # 服务器玩法：在同目录建 .env 写入以下三项，compose 自动读取
+      - KOOK_BOT_TOKEN=${KOOK_BOT_TOKEN:-}
+      - KOOK_HALL_CHANNEL_ID=${KOOK_HALL_CHANNEL_ID:-}
+      - KOOK_ADMIN_CHANNEL_ID=${KOOK_ADMIN_CHANNEL_ID:-}
       # 时区：按中国时间切"每日结算"
       - TZ=Asia/Shanghai
     volumes:

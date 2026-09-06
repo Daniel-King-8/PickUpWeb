@@ -16,17 +16,22 @@ step "1. 注册雇主 u1"
 R=$(curl -s -X POST $BASE/api/users/register -H 'Content-Type: application/json' -d '{"username":"u1test","password":"test123456","phone":"13800000001"}')
 T1=$(echo "$R" | json "['data']['token']")
 [ -n "$T1" ] && ok "雇主 token 获取" || bad "注册失败: $R"
+# 校区绑定（新用户须先选校区才能下单/看大厅）
+R=$(curl -s -X POST $BASE/api/users/campus -H "Authorization: Bearer $T1" -H 'Content-Type: application/json' -d '{"campus":"scyz"}')
+echo "$R" | grep -q '"success":true' || echo "$R" | grep -q '"code":0' && true
 
 step "2. 注册跑腿员 u2"
 R=$(curl -s -X POST $BASE/api/users/register -H 'Content-Type: application/json' -d '{"username":"u2test","password":"test123456","phone":"13800000002"}')
 T2=$(echo "$R" | json "['data']['token']")
 [ -n "$T2" ] && ok "跑腿员 token 获取" || bad "注册失败: $R"
+R=$(curl -s -X POST $BASE/api/users/campus -H "Authorization: Bearer $T2" -H 'Content-Type: application/json' -d '{"campus":"scyz"}')
+echo "$R" | grep -q '"success":true' || echo "$R" | grep -q '"code":0' && true
 
-step "3. u1 下单（菜鸟驿站 + 8号楼）"
+step "3. u1 下单（菜鸟驿站 + 8号楼 302）"
 R=$(curl -s -X POST $BASE/api/orders -H "Authorization: Bearer $T1" -H 'Content-Type: application/json' \
   -d '{"station":"菜鸟驿站","pickupCode":"8-8-8","deliverPlace":"8号楼 302","contactPhone":"13800000001"}')
 OID=$(echo "$R" | json "['data']['orderId']")
-[ -n "$OID" ] && ok "下单成功 orderId=$OID (跑腿费应=¥2.5: 基础2+楼栋0.5)" || bad "下单失败: $R"
+[ -n "$OID" ] && ok "下单成功 orderId=$OID (跑腿费=基础¥1+平台费, 见返回 reward)" || bad "下单失败: $R"
 
 step "4. u1 上传付款截图"
 R=$(curl -s -X POST $BASE/api/orders/$OID/pay-upload -H "Authorization: Bearer $T1" \
@@ -39,6 +44,11 @@ R=$(curl -s -X POST $BASE/api/users/login -H 'Content-Type: application/json' -d
 TA=$(echo "$R" | json "['data']['token']")
 R=$(curl -s -X POST $BASE/api/admin/orders/$OID/mark-paid -H "Authorization: Bearer $TA")
 echo "$R" | grep -q '"success":true' && ok "标记已支付" || bad "标记失败: $R"
+
+step "5.5. admin 授予 u2 赏金猎人资格（抢单前提）"
+U2ID=$(curl -s $BASE/api/users/me -H "Authorization: Bearer $T2" | json "['data']['id']")
+R=$(curl -s -X POST $BASE/api/admin/hunter/$U2ID/approve -H "Authorization: Bearer $TA")
+echo "$R" | grep -q '"success":true' && ok "猎头资格已授予" || bad "授猎头失败: $R"
 
 step "6. u2 查看大厅（取件码应脱敏 ******）"
 R=$(curl -s $BASE/api/orders/hall -H "Authorization: Bearer $T2")

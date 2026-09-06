@@ -108,6 +108,9 @@ async function bootstrap() {
 
 bootstrap()
   .then(() => {
+    // Kook 机器人（WebSocket 出站连接；未配置 token 自动跳过）
+    const kook = require('./kook');
+    kook.start();
     app.listen(PORT, () => {
       console.log(`[server] 取个件呗 Web 版启动成功: http://0.0.0.0:${PORT}`);
     });

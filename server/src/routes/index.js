@@ -11,6 +11,7 @@ module.exports = function mountRoutes(ctx) {
   router.use('/orders', require('./orders')(ctx));
   router.use('/admin', require('./admin')(ctx));
   router.use('/public', require('./public')(ctx));
+  router.use('/kook', require('./kook')(ctx));
 
   return router;
 };

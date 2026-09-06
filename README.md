@@ -53,6 +53,23 @@ docker compose up -d --build
 4. **每日结算 tab**：晚上选日期 → 看预览（跑腿员应得=合计-抽成）→ 生成结算单 → 线下转账 → 点「已转账」
 5. **订单管理 tab**：异常订单可取消
 
+## Kook 机器人对接（通知 + 接单大厅）
+
+Web 端所有订单状态变化实时推送到 Kook（WebSocket 出站连接，无需公网端口）：
+
+```
+用户网站下单并上传付款截图 → #订单待确定 频道卡片（【确认到账并发布】按钮）
+  → 管理员点按钮 → #接单大厅 频道订单卡片（【抢单】按钮，取件码脱敏）
+  → 猎人点抢单 → 双方私聊通知（取件码解锁 / 标记送达 / 确认收货按钮）
+  → 全程可在 Kook 内完成，无需打开网页
+```
+
+0. **Kook 服务器需建两个子频道**：# 订单待确定、# 接单大厅
+1. [Kook 开发者中心](https://developer.kookapp.cn) 创建机器人 → 复制 Bot Token → 邀请机器人进你的服务器
+2. 管理后台 **「Kook 对接」tab**：填 Token 与两个频道 ID（频道 ID 在开发者中心「频道管理」复制）→ 保存 → 点「测试」验证
+3. 用户端：用户在「我的 → 绑定 Kook 机器人」生成绑定码 → Kook 里私聊机器人发送「绑定 xxxxxx」即完成绑定（绑定后 Kook 按钮操作即代表该用户）
+4. 也可用环境变量 `KOOK_BOT_TOKEN` 注入 Token（后台配置优先）；不配置则整个模块自动禁用，Web 功能不受影响
+
 ## 本地开发（win11 / mac）
 
 ```bash
@@ -71,7 +88,9 @@ pickup-web/
 │   └── src/
 │       ├── app.js         # 入口（建表+种子数据+启动）
 │       ├── models/        # User/Order/Settlement/Setting
-│       ├── routes/        # users/orders/admin/public
+│       ├── routes/        # users/orders/admin/public/kook
+│       ├── services/      # orderService（订单状态机，Web 与 Kook 共用）
+│       ├── kook/          # Kook 机器人（WS 客户端/卡片/事件处理/通知矩阵）
 │       ├── middleware/    # auth(JWT)/upload(multer)
 │       └── utils/helpers.js  # 算费/脱敏/日期/单号
 ├── web/               # Vue3 前端

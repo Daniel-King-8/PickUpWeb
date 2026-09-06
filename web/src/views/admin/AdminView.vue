@@ -14,6 +14,7 @@
       <van-tab title="每日结算" name="settle" />
       <van-tab title="费率设置" name="settings" />
       <van-tab title="用户管理" name="users" :badge="hunterApps.length > 0 ? hunterApps.length : undefined" />
+      <van-tab title="Kook 对接" name="kook" />
     </van-tabs>
 
     <!-- 待核对：PAYING 订单，查看截图 → 标记已支付 -->
@@ -318,6 +319,37 @@
         </div>
       </van-popup>
     </div>
+
+    <!-- Kook 对接 -->
+    <div v-if="tab === 'kook'" class="section">
+      <!-- 状态卡 -->
+      <van-cell-group inset title="机器人状态">
+        <van-cell title="启用状态" :value="kookStatus.enabled ? '已启用' : '未启用（未配置 token）'">
+          <template #icon><van-icon name="checked" class="cell-icon" /></template>
+        </van-cell>
+        <van-cell title="WS 连接" :value="kookStatus.wsState || 'IDLE'" />
+        <van-cell v-if="kookStatus.lastError" title="最近错误" value-class="kook-err" :value="kookStatus.lastError" />
+        <van-cell title="已绑定用户" :value="`${kookStatus.boundCount ?? 0} 位`" />
+        <van-cell title="消息序号(sn)" :value="`${kookStatus.lastSn ?? 0}`" />
+      </van-cell-group>
+
+      <!-- 配置表单 -->
+      <van-cell-group inset title="频道与 Token 配置" class="mt-3">
+        <van-field v-model="kookForm.token" type="password" label="Bot Token" placeholder="留空表示不修改现有 Token" />
+        <van-field v-model="kookForm.guildId" label="服务器 ID" placeholder="选填，展示用" />
+        <van-field v-model="kookForm.hallChannelId" label="接单大厅频道 id" placeholder="#接单大厅 的频道 id" />
+        <van-field v-model="kookForm.adminChannelId" label="订单待确定频道 id" placeholder="#订单待确定 的频道 id" />
+        <van-button class="save-btn" round block type="primary" @click="saveKookConfig">保存配置</van-button>
+        <div class="kook-help">
+          📌 使用步骤：Kook 开发者中心创建机器人并拿到 Token → 邀请机器人进你的服务器 → 右键子频道复制 ID（开发者中心「频道管理」可见）→ 保存配置 → 点下方测试
+        </div>
+      </van-cell-group>
+
+      <van-cell-group inset title="对接测试" class="mt-3">
+        <van-button round block plain type="primary" :loading="kookTesting" @click="testKook">向「订单待确定」频道发送测试消息</van-button>
+        <div class="kook-help">测试成功后：用户在网站下单并上传付款截图 → 机器人自动在「订单待确定」发卡片 → 点【确认到账并发布】→ 订单出现在「接单大厅」</div>
+      </van-cell-group>
+    </div>
   </div>
 </template>
 
@@ -569,6 +601,44 @@ async function saveContact() {
   showSuccessToast('联系方式已保存');
 }
 
+/* ---------- Kook 对接 ---------- */
+const kookStatus = ref({});
+const kookTesting = ref(false);
+// token 不回显明文（password 输入框留空不修改），其余配置回显
+const kookForm = reactive({ token: '', guildId: '', hallChannelId: '', adminChannelId: '' });
+
+async function loadKookStatus() {
+  const res = await api.get('/admin/kook/status');
+  kookStatus.value = res.data;
+  kookForm.guildId = res.data.guildId || '';
+  kookForm.hallChannelId = res.data.hallChannelId || '';
+  kookForm.adminChannelId = res.data.adminChannelId || '';
+}
+
+/** 保存配置：token 留空则跳过不改动；频道 id 允许清空 */
+async function saveKookConfig() {
+  const saves = [];
+  if (kookForm.token.trim()) {
+    saves.push(api.put('/admin/settings', { key: 'kookBotToken', value: kookForm.token.trim() }));
+  }
+  saves.push(api.put('/admin/settings', { key: 'kookGuildId', value: kookForm.guildId.trim() }));
+  saves.push(api.put('/admin/settings', { key: 'kookHallChannelId', value: kookForm.hallChannelId.trim() }));
+  saves.push(api.put('/admin/settings', { key: 'kookAdminChannelId', value: kookForm.adminChannelId.trim() }));
+  await Promise.all(saves);
+  showSuccessToast('Kook 配置已保存');
+  loadKookStatus();
+}
+
+async function testKook() {
+  kookTesting.value = true;
+  try {
+    await api.post('/admin/kook/test');
+    showSuccessToast('测试消息已发送，请到「订单待确定」频道查看');
+  } finally {
+    kookTesting.value = false;
+  }
+}
+
 /* ---------- 用户管理 ---------- */
 const users = ref([]);
 const hunterApps = ref([]);
@@ -715,6 +785,7 @@ watch(tab, () => {
     loadUsers();
     loadHunterApps();
   }
+  if (tab.value === 'kook') loadKookStatus();
 });
 
 onMounted(() => {
@@ -1031,5 +1102,18 @@ onMounted(() => {
 }
 .edit-actions {
   padding: 20px 16px 8px;
+}
+
+/* Kook 对接 */
+.kook-err {
+  color: #f43f5e !important;
+  font-size: 12px;
+  word-break: break-all;
+}
+.kook-help {
+  padding: 10px 16px 14px;
+  font-size: 12px;
+  color: #64748b;
+  line-height: 1.6;
 }
 </style>

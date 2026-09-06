@@ -25,6 +25,9 @@ const User = db.define(
     campus: { type: DataTypes.STRING(20), defaultValue: '' }, // 校区 id（scyz/cdny），首次登录选择
     isHunter: { type: DataTypes.BOOLEAN, defaultValue: false }, // 赏金猎人身份（接单资格），管理员授予
     hunterApplyAt: { type: DataTypes.DATE, defaultValue: null }, // 申请成为赏金猎人的时间（待审核标记）
+    // Kook 机器人绑定：Kook 用户 id（纯数字串）。唯一性由代码层校验保障
+    // （不加 unique 约束：与 uid 同因，SQLite 对已有表 ADD COLUMN 带唯一约束会失败）
+    kookId: { type: DataTypes.STRING(32), defaultValue: null },
   },
   { tableName: 'users' }
 );

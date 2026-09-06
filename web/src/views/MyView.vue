@@ -85,6 +85,9 @@
       <van-cell title="绑定校区" :value="campusName(user.campus)">
         <template #icon><van-icon name="hotel-o" class="cell-icon" /></template>
       </van-cell>
+      <van-cell :title="kook.bound ? 'Kook 绑定' : '绑定 Kook 机器人'" :value="kook.bound ? kook.kookId : '未绑定'" is-link @click="openKook">
+        <template #icon><van-icon name="chat-o" class="cell-icon" /></template>
+      </van-cell>
       <van-cell title="关于取个件呗" is-link value="博客介绍" @click="onAbout">
         <template #icon><van-icon name="info-o" class="cell-icon" /></template>
       </van-cell>
@@ -106,6 +109,32 @@
       <div class="rename-tip">⚠️ 名称即登录账号：张三 → 李四后，登录时须使用"李四"</div>
       <div class="edit-actions">
         <van-button type="primary" block round @click="saveRename">保存</van-button>
+      </div>
+    </van-popup>
+
+    <!-- Kook 绑定弹出层 -->
+    <van-popup v-model:show="showKook" position="bottom" round>
+      <div class="edit-title">Kook 机器人绑定</div>
+      <div class="kook-wrap">
+        <!-- 已绑定 -->
+        <template v-if="kook.bound">
+          <div class="kook-bound">✅ 已绑定 Kook：{{ kook.kookId }}</div>
+          <div class="kook-tip">Kook 里收到的订单通知与按钮操作都将以你的账号执行</div>
+          <van-button block round plain type="danger" class="kook-btn" @click="unbindKook">解除绑定</van-button>
+        </template>
+        <!-- 生成码待绑定 -->
+        <template v-else-if="kook.code">
+          <div class="kook-code">{{ kook.code }}</div>
+          <div class="kook-tip">打开 Kook，向机器人私聊或任意频道发送：</div>
+          <div class="kook-command">绑定 {{ kook.code }}</div>
+          <div class="kook-tip">绑定码 10 分钟内有效，重新生成后旧码作废</div>
+          <van-button block round plain size="small" class="kook-btn" @click="genCode">重新生成</van-button>
+        </template>
+        <!-- 未绑定未生成 -->
+        <template v-else>
+          <div class="kook-tip">绑定后可在 Kook 里实时接收订单通知，并通过机器人卡片接单/标记送达/确认收货</div>
+          <van-button type="primary" block round class="kook-btn" @click="genCode">生成绑定码</van-button>
+        </template>
       </div>
     </van-popup>
   </div>
@@ -175,6 +204,40 @@ async function onApplyHunter() {
   } catch (e) {
     /* 拦截器已提示 */
   }
+}
+
+/* ---------- Kook 绑定 ---------- */
+const showKook = ref(false);
+const kook = reactive({ bound: false, kookId: '', code: '', expireAt: 0 });
+
+async function loadKook() {
+  const res = await api.get('/kook/status');
+  kook.bound = res.data.bound;
+  kook.kookId = res.data.kookId;
+  if (kook.bound) kook.code = '';
+}
+
+function openKook() {
+  showKook.value = true;
+  loadKook();
+}
+
+async function genCode() {
+  const res = await api.post('/kook/bind-code');
+  kook.code = res.data.code;
+  kook.expireAt = res.data.expireAt;
+  showToast('绑定码已生成，请在 Kook 发送「绑定 ' + kook.code + '」');
+}
+
+async function unbindKook() {
+  try {
+    await showConfirmDialog({ title: '解除绑定', message: '确认解除当前 Kook 绑定？', confirmText: '解绑' });
+  } catch (e) {
+    return;
+  }
+  await api.post('/kook/unbind');
+  showToast('已解绑');
+  loadKook();
 }
 
 /* ---------- 修改名称（即登录账号） ---------- */
@@ -394,5 +457,47 @@ function onLogout() {
 }
 .edit-actions {
   padding: 16px;
+}
+
+/* Kook 绑定弹层 */
+.kook-wrap {
+  padding: 8px 24px 28px;
+  text-align: center;
+}
+.kook-bound {
+  font-size: 15px;
+  font-weight: 600;
+  color: #059669;
+  margin-bottom: 8px;
+}
+.kook-code {
+  font-size: 42px;
+  font-weight: 800;
+  letter-spacing: 10px;
+  color: #0f172a;
+  margin: 8px 0 6px;
+  background: #ecfdf5;
+  border-radius: 12px;
+  padding: 10px 0;
+  border: 1px dashed #6ee7b7;
+}
+.kook-command {
+  font-size: 16px;
+  font-weight: 700;
+  color: #059669;
+  background: #f8fafc;
+  border-radius: 8px;
+  padding: 10px 16px;
+  margin: 6px 0;
+  font-family: monospace;
+}
+.kook-tip {
+  font-size: 12px;
+  color: #64748b;
+  margin: 6px 0;
+  line-height: 1.5;
+}
+.kook-btn {
+  margin-top: 14px;
 }
 </style>

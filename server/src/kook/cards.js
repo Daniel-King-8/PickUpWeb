@@ -1,0 +1,223 @@
+/**
+ * Kook 卡片消息构建器（CardMessage）
+ *
+ * 版式保守：1 张卡 + header/section/action-group/context，按钮 ≤2，
+ * 避免触及 Kook 的模块/按钮数量上限。
+ *
+ * 按钮约定：value = JSON.stringify({ act, id })，click='return-val'，
+ * 点击后 Kook 把 msg_id/点击者 user_id/value 回传给 bot（handler.js 处理）。
+ * act 白名单：accept | deliver | confirm | mark-paid
+ */
+const { maskCode } = require('../utils/helpers');
+
+/* ---------- 基础结构 ---------- */
+
+const header = (text) => ({
+  type: 'header',
+  text: { type: 'plain-text', content: text },
+});
+
+const section = (text) => ({
+  type: 'section',
+  text: { type: 'kmarkdown', content: text },
+});
+
+/** section + 右侧 accessory（图片） */
+const sectionWithImage = (text, imageUrl) => ({
+  type: 'section',
+  mode: 'left',
+  text: { type: 'kmarkdown', content: text },
+  accessory: { type: 'image', src: imageUrl, size: 'lg' },
+});
+
+/** 图片组模块（1~9 张） */
+const imageGroup = (urls) => ({
+  type: 'image-group',
+  elements: urls.map((u) => ({ type: 'image', src: u })),
+});
+
+const actionGroup = (buttons) => ({
+  type: 'action-group',
+  elements: buttons,
+});
+
+const button = (text, theme, act, id) => ({
+  type: 'button',
+  theme,
+  value: JSON.stringify({ act, id }),
+  click: 'return-val',
+  text: { type: 'plain-text', content: text },
+});
+
+const context = (...texts) => ({
+  type: 'context',
+  elements: texts.map((t) => ({ type: 'plain-text', content: t })),
+});
+
+/* ---------- value 编解码 ---------- */
+
+const encodeBtn = ({ act, id }) => JSON.stringify({ act, id });
+
+const decodeBtn = (value) => {
+  try {
+    const o = JSON.parse(value);
+    if (o && typeof o.act === 'string' && o.id !== undefined) return o;
+  } catch (e) {
+    /* 非法 value */
+  }
+  return null;
+};
+
+/* ---------- 订单卡片集合 ---------- */
+
+/**
+ * 接单大厅卡片：订单确认（已支付）后发布到接单大厅频道
+ * 取件码/电话对外脱敏，点击「抢单」后跑腿员 DM 里才是明文
+ * 注意：文本一律用 plain-text 段落（kmarkdown 加粗在专名/emoji 场景曾渲染乱码）
+ */
+const hallCard = (order, employerName) => ({
+  type: 'card',
+  theme: 'success',
+  modules: [
+    header(`💰 新悬赏待接单 · ¥${Number(order.reward).toFixed(2)}`),
+    {
+      type: 'section',
+      text: {
+        type: 'plain-text',
+        content: [
+          `订单号：${order.orderNo}`,
+          `前往地点：${order.station}`,
+          `目的地：${order.deliverPlace}`,
+          `取件码：${maskCode(order.pickupCode)}（抢单后可见）`,
+          `联系电话：${maskCode(order.contactPhone)}`,
+          `雇主：${employerName}`,
+        ].join('\n'),
+      },
+    },
+    actionGroup([button('⚡ 抢单', 'primary', 'accept', order.id)]),
+  ],
+});
+
+/**
+ * 订单待确定频道卡片：管理员核对付款截图，点「确认到账」→ 订单进大厅
+ * 截图走 kook asset 上传后嵌入（失败则无图）
+ */
+const adminCheckCard = (order, employerName, employerUid, screenshotUrl) => {
+  const lines = [
+    `订单号：${order.orderNo}`,
+    `雇主：${employerName}`,
+    `ID：${employerUid || '—'}`,
+    `金额：¥${Number(order.reward).toFixed(2)}`,
+    `前往地点：${order.station}`,
+    `目的地：${order.deliverPlace}`,
+  ];
+  if (order.remark) lines.push(`备注：${order.remark}`);
+  const modules = [
+    header('🧾 新悬赏待核对'),
+    { type: 'section', text: { type: 'plain-text', content: lines.join('\n') } },
+  ];
+  if (screenshotUrl) modules.push(imageGroup([screenshotUrl]));
+  modules.push(
+    actionGroup([button('✅ 确认到账并发布', 'success', 'mark-paid', order.id)]),
+    context('截图核对无误后点击按钮，订单将自动发布到接单大厅')
+  );
+  return { type: 'card', theme: 'warning', modules };
+};
+
+/** 已确认的待核对卡片（message/update 更新旧卡用，替换掉按钮） */
+const adminConfirmedCard = (order) => ({
+  type: 'card',
+  theme: 'success',
+  modules: [
+    header('✅ 已确认并发布'),
+    {
+      type: 'section',
+      text: {
+        type: 'plain-text',
+        content: [
+          `订单号：${order.orderNo}`,
+          `雇主已付款，订单已发布到接单大厅。`,
+        ].join('\n'),
+      },
+    },
+  ],
+});
+
+/** 抢单成功 → DM 跑腿员：取件码明文 + 标记送达按钮 */
+const runnerAcceptedCard = (order, employerName) => ({
+  type: 'card',
+  theme: 'success',
+  modules: [
+    header('🏃 接单成功！'),
+    section(`**${order.station}** → **${order.deliverPlace}**`),
+    section(
+      `单号：${order.orderNo}\n取件码：**${order.pickupCode}**\n雇主电话：${order.contactPhone}\n报酬：¥${Number(order.reward).toFixed(2)}`
+    ),
+    actionGroup([button('📦 我已送达', 'primary', 'deliver', order.id)]),
+    context(`雇主：${employerName} · 送达后请通知雇主确认`),
+  ],
+});
+
+/** 抢单成功 → DM 雇主：谁接了单 */
+const employerAcceptedCard = (order, runnerName) => ({
+  type: 'card',
+  theme: 'info',
+  modules: [
+    header('🎉 你的悬赏已被接拍'),
+    section(
+      `跑腿员：**${runnerName}**\n路线：${order.station} → ${order.deliverPlace}\n单号：${order.orderNo}`
+    ),
+    context('等待跑腿员送达后，你会收到确认提醒'),
+  ],
+});
+
+/** 送达 → DM 雇主：确认收货按钮（有照片则带图） */
+const employerDeliveredCard = (order, photoUrl) => {
+  const modules = [
+    header('📦 快递已送达！'),
+    section(`**${order.deliverPlace}**\n单号：${order.orderNo}`),
+  ];
+  if (photoUrl) modules.push(imageGroup([photoUrl]));
+  modules.push(
+    actionGroup([button('✅ 确认已收到', 'success', 'confirm', order.id)]),
+    context('确认后本单完成，跑腿员赏金即刻结算')
+  );
+  return { type: 'card', theme: 'warning', modules };
+};
+
+/** 确认收货 → DM 跑腿员：跑单完成 */
+const runnerConfirmedCard = (order) => ({
+  type: 'card',
+  theme: 'success',
+  modules: [
+    header('💰 悬赏已确认！'),
+    section(
+      `雇主已确认收到快递\n\n本单佣金：¥${Number(order.reward).toFixed(2)}\n平台服务费：¥${Number(order.fee).toFixed(2)}\n你的实得：**¥${(order.reward - order.fee).toFixed(2)}**`
+    ),
+    context(`单号：${order.orderNo} · 每日结算后统一转账`),
+  ],
+});
+
+/** 取消 → DM 雇主/跑腿员 */
+const cancelCard = (order, reason) => ({
+  type: 'card',
+  theme: 'danger',
+  modules: [
+    header('❌ 订单已取消'),
+    section(`单号：${order.orderNo}\n${reason || ''}`),
+    context('如有疑问请联系管理员'),
+  ],
+});
+
+module.exports = {
+  encodeBtn,
+  decodeBtn,
+  hallCard,
+  adminCheckCard,
+  adminConfirmedCard,
+  runnerAcceptedCard,
+  employerAcceptedCard,
+  employerDeliveredCard,
+  runnerConfirmedCard,
+  cancelCard,
+};

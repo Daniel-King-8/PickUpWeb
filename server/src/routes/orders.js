@@ -13,13 +13,29 @@
 const express = require('express');
 const { Order, Setting, User } = require('../models');
 const { uploadImage } = require('../middleware/upload');
-const { maskCode, generateOrderNo, calcFee } = require('../utils/helpers');
+const { maskCode, generateOrderNo, calcFee, normalizeFeeRules } = require('../utils/helpers');
+const service = require('../services/orderService');
+const kook = require('../kook');
+
+/** orderService 错误码 → HTTP 映射（与历史响应状态码/业务码保持逐字一致） */
+function httpFail(res, r) {
+  const { code, message } = r;
+  const map = {
+    NOT_FOUND: { status: 404, biz: 404 },
+    NOT_HUNTER: { status: 403, biz: 4301 },
+    NOT_RUNNER: { status: 403, biz: 403 },
+    NOT_PUBLISHER_CONFIRM: { status: 403, biz: 403 },
+    NOT_PUBLISHER_CANCEL: { status: 403, biz: 403 },
+  };
+  const m = map[code] || { status: 400, biz: 400 };
+  return res.status(m.status).json({ code: m.biz, message });
+}
 
 module.exports = (ctx) => {
   const router = express.Router();
   const { auth } = ctx;
 
-  /** 读费率规则（按校区取；兼容旧格式未分级数据） */
+  /** 读费率规则（按校区取；旧结构经 normalizeFeeRules 自动转换） */
   async function getFeeRulesForCampus(campus) {
     const s = await Setting.findOne({ where: { key: 'feeRules' } });
     if (!s) return null;
@@ -29,11 +45,7 @@ module.exports = (ctx) => {
     } catch (e) {
       return null;
     }
-    if (data && data.campuses) {
-      return data.campuses[campus] || data.campuses.scyz || null;
-    }
-    // 旧格式：未按校区分级，两校区共用
-    return data;
+    return normalizeFeeRules(data, campus);
   }
 
   /** 下单 */
@@ -167,7 +179,7 @@ module.exports = (ctx) => {
     return res.json({ code: 0, data: json });
   });
 
-  /** 上传付款截图（PAYING → 等待管理员确认，不改变状态） */
+  /** 上传付款截图（PAYING → 等待管理员确认，不改变状态）；上传后通知 Kook 待核对频道 */
   router.post('/:id/pay-upload', auth, uploadImage, async (req, res) => {
     if (!req.file) return res.status(400).json({ code: 400, message: '请选择图片' });
     const order = await Order.findByPk(req.params.id);
@@ -176,85 +188,42 @@ module.exports = (ctx) => {
       return res.status(403).json({ code: 403, message: '无权限操作该订单' });
     }
     await order.update({ payerScreenshot: `/uploads/${req.file.filename}` });
+    kook.notifyOrderEvent('PAY_UPLOADED', order.id); // 待核对卡片（不阻塞响应）
     return res.json({ code: 0, data: { screenshot: order.payerScreenshot } });
   });
 
   /**
    * 抢单（CAS 原子更新：仅 PAID 且无跑腿员时成功）
    * 防重复抢单：Sequelize update where 条件含 status='PAID' && runnerId=null，
-   * 影响行数 ≠1 即被他人抢走
+   * 影响行数 ≠1 即被他人抢走。逻辑下沉 orderService（与 Kook 按钮共用），
+   * 此处仅负责 HTTP 响应映射。
    */
   router.post('/:id/accept', auth, async (req, res) => {
-    const order = await Order.findByPk(req.params.id);
-    if (!order) return res.status(404).json({ code: 404, message: '订单不存在' });
-    if (order.publisherId === req.user.id) {
-      return res.status(400).json({ code: 400, message: '不能接自己发布的单' });
-    }
-    // 接单资格：必须是审核通过的"赏金猎人"
-    const me = await User.findByPk(req.user.id);
-    if (!me || !me.isHunter) {
-      return res.status(403).json({ code: 4301, message: '只有赏金猎人才能接单，请先申请' });
-    }
-    const [affected] = await Order.update(
-      { runnerId: req.user.id, status: 'ACCEPTED', acceptedAt: new Date() },
-      { where: { id: order.id, status: 'PAID', runnerId: null } }
-    );
-    if (affected !== 1) {
-      return res.status(400).json({ code: 400, message: '手慢了，订单已被接走' });
-    }
+    const r = await service.acceptOrder(req.params.id, req.user);
+    if (!r.ok) return httpFail(res, r);
     return res.json({ code: 0, data: { success: true } });
   });
 
   /** 送达：跑腿员标记已完成（ACCEPTED → DELIVERED；照片可选，不再强制） */
   router.post('/:id/deliver', auth, uploadImage, async (req, res) => {
-    const order = await Order.findByPk(req.params.id);
-    if (!order) return res.status(404).json({ code: 404, message: '订单不存在' });
-    if (order.runnerId !== req.user.id) {
-      return res.status(403).json({ code: 403, message: '只有跑腿员可标记送达' });
-    }
-    // 有照片则保存，无照片正常送达
+    // 有照片则保存，无照片正常送达（Kook 端按钮不带照片）
     const photo = req.file ? `/uploads/${req.file.filename}` : '';
-    const [affected] = await Order.update(
-      { deliveryPhoto: photo, status: 'DELIVERED', deliveredAt: new Date() },
-      { where: { id: order.id, status: 'ACCEPTED', runnerId: req.user.id } }
-    );
-    if (affected !== 1) {
-      return res.status(400).json({ code: 400, message: '当前状态不允许操作' });
-    }
+    const r = await service.deliverOrder(req.params.id, req.user, { photo });
+    if (!r.ok) return httpFail(res, r);
     return res.json({ code: 0, data: { success: true } });
   });
 
   /** 雇主确认收货（DELIVERED → CONFIRMED） */
   router.post('/:id/confirm', auth, async (req, res) => {
-    const order = await Order.findByPk(req.params.id);
-    if (!order) return res.status(404).json({ code: 404, message: '订单不存在' });
-    if (order.publisherId !== req.user.id) {
-      return res.status(403).json({ code: 403, message: '只有雇主可确认收货' });
-    }
-    const [affected] = await Order.update(
-      { status: 'CONFIRMED', confirmedAt: new Date() },
-      { where: { id: order.id, status: 'DELIVERED', publisherId: req.user.id } }
-    );
-    if (affected !== 1) {
-      return res.status(400).json({ code: 400, message: '当前状态不允许操作' });
-    }
+    const r = await service.confirmOrder(req.params.id, req.user);
+    if (!r.ok) return httpFail(res, r);
     return res.json({ code: 0, data: { success: true } });
   });
 
   /** 雇主取消（仅 PAYING / 未被接单的 PAID） */
   router.post('/:id/cancel', auth, async (req, res) => {
-    const order = await Order.findByPk(req.params.id);
-    if (!order) return res.status(404).json({ code: 404, message: '订单不存在' });
-    if (order.publisherId !== req.user.id) {
-      return res.status(403).json({ code: 403, message: '只有雇主可取消订单' });
-    }
-    const [affected] = await Order.update(
-      { status: 'CANCELED' },
-      { where: { id: order.id, status: ['PAYING', 'PAID'], runnerId: null } }
-    );
-    if (affected !== 1) {
-      return res.status(400).json({ code: 400, message: '订单已被接单，请先联系管理员' });
-    }
+    const r = await service.cancelOrderByUser(req.params.id, req.user);
+    if (!r.ok) return httpFail(res, r);
     return res.json({ code: 0, data: { success: true } });
   });
 

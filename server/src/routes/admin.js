@@ -12,6 +12,8 @@ const bcrypt = require('bcryptjs');
 const { Order, Setting, Settlement, User } = require('../models');
 const { uploadImage } = require('../middleware/upload');
 const { cnToday, generateUid } = require('../utils/helpers');
+const service = require('../services/orderService');
+const kook = require('../kook');
 
 /** 批量取用户信息并生成 { id -> {name(nickname||username), uid, phone} } map */
 async function userMapByIds(ids) {
@@ -116,24 +118,20 @@ module.exports = (ctx) => {
     });
   });
 
-  /** 核对后标记已支付（PAYING → PAID，订单进入待接单） */
+  /** 核对后标记已支付（PAYING → PAID，订单进入待接单）；逻辑下沉 orderService（Kook 按钮共用） */
   router.post('/orders/:id/mark-paid', async (req, res) => {
-    const [affected] = await Order.update(
-      { status: 'PAID', paidAt: new Date() },
-      { where: { id: req.params.id, status: 'PAYING' } }
-    );
-    if (affected !== 1) return res.status(400).json({ code: 400, message: '订单状态不是待支付' });
+    const r = await service.markPaidOrder(req.params.id);
+    if (!r.ok) return res.status(400).json({ code: 400, message: r.message });
     return res.json({ code: 0, data: { success: true } });
   });
 
   /** 管理员取消任意未完成订单（PAYING/PAID/ACCEPTED/DELIVERED） */
   router.post('/orders/:id/cancel', async (req, res) => {
-    const order = await Order.findByPk(req.params.id);
-    if (!order) return res.status(404).json({ code: 404, message: '订单不存在' });
-    if (['CANCELED', 'CONFIRMED', 'SETTLED'].includes(order.status)) {
-      return res.status(400).json({ code: 400, message: '该订单不可取消' });
+    const r = await service.cancelOrderByAdmin(req.params.id);
+    if (!r.ok) {
+      const st = r.code === 'NOT_FOUND' ? 404 : 400;
+      return res.status(st).json({ code: st, message: r.message });
     }
-    await order.update({ status: 'CANCELED' });
     return res.json({ code: 0, data: { success: true } });
   });
 
@@ -428,6 +426,48 @@ module.exports = (ctx) => {
     }
     await target.destroy();
     return res.json({ code: 0, data: { success: true } });
+  });
+
+  /* ---------- Kook 对接 ---------- */
+
+  /** Kook 聚合状态：模块启用/WS 连接态/配置/绑定数 */
+  router.get('/kook/status', async (req, res) => {
+    const { Op } = require('sequelize');
+    const [status, boundCount] = await Promise.all([
+      kook.status(),
+      User.count({ where: { kookId: { [Op.ne]: null } } }),
+    ]);
+    return res.json({ code: 0, data: { ...status, boundCount } });
+  });
+
+  /** 向管理员频道发测试卡片（验证 token/频道配置是否可用） */
+  router.post('/kook/test', async (req, res) => {
+    const result = await kook.sendTest();
+    if (!result) return res.status(400).json({ code: 400, message: '发送失败：检查 token / 管理员频道配置' });
+    return res.json({ code: 0, data: { success: true } });
+  });
+
+  /**
+   * 强制代绑/解绑用户 Kook（绑定改由用户自助，此处供管理员处理异常）
+   * body: { kookId } —— 空字符串解绑；Kook 用户 id 为纯数字
+   */
+  router.put('/users/:id/kook', async (req, res) => {
+    const user = await User.findByPk(req.params.id);
+    if (!user) return res.status(404).json({ code: 404, message: '用户不存在' });
+    const kookUserId = String((req.body || {}).kookId != null ? req.body.kookId : '').trim();
+    if (!kookUserId) {
+      await user.update({ kookId: null });
+      return res.json({ code: 0, data: { success: true, kookId: null } });
+    }
+    if (!/^\d{1,32}$/.test(kookUserId)) {
+      return res.status(400).json({ code: 400, message: 'Kook 用户 ID 只能是不超过 32 位的纯数字' });
+    }
+    const exist = await User.findOne({ where: { kookId: kookUserId } });
+    if (exist && exist.id !== user.id) {
+      return res.status(400).json({ code: 400, message: '该 Kook 用户已绑定其他账号' });
+    }
+    await user.update({ kookId: kookUserId });
+    return res.json({ code: 0, data: { success: true, kookId: user.kookId } });
   });
 
   return router;
