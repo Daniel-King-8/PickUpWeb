@@ -335,7 +335,12 @@
 
       <!-- 配置表单 -->
       <van-cell-group inset title="频道与 Token 配置" class="mt-3">
-        <van-field v-model="kookForm.token" type="password" label="Bot Token" placeholder="留空表示不修改现有 Token" />
+        <van-field
+          v-model="kookForm.token"
+          type="password"
+          label="Bot Token"
+          :placeholder="kookStatus.botTokenSet ? '✔ 已设置（留空表示不修改，Token 不回显）' : '未设置，请粘贴 Kook 开发者中心的 Token'"
+        />
         <van-field v-model="kookForm.guildId" label="服务器 ID" placeholder="选填，展示用" />
         <van-field v-model="kookForm.hallChannelId" label="接单大厅频道 id" placeholder="#接单大厅 的频道 id" />
         <van-field v-model="kookForm.adminChannelId" label="订单待确定频道 id" placeholder="#订单待确定 的频道 id" />
