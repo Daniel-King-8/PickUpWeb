@@ -239,6 +239,25 @@ const employerDeliveredCard = (order, photoUrl) => {
   return { type: 'card', theme: 'warning', modules };
 };
 
+/** 雇主确认后的「已送达」卡片更新为已完成（原卡按钮消失） */
+const employerConfirmedCard = (order) => ({
+  type: 'card',
+  theme: 'success',
+  modules: [
+    header('✅ 订单已完成'),
+    {
+      type: 'section',
+      text: {
+        type: 'plain-text',
+        content: [
+          `单号：${order.orderNo}`,
+          `悬赏已确认到账，跑腿员收益进入当日结算。`,
+        ].join('\n'),
+      },
+    },
+  ],
+});
+
 /** 确认收货 → DM 跑腿员：跑单完成 */
 const runnerConfirmedCard = (order) => ({
   type: 'card',
@@ -399,6 +418,7 @@ module.exports = {
   runnerAcceptedCard,
   employerAcceptedCard,
   employerDeliveredCard,
+  employerConfirmedCard,
   runnerConfirmedCard,
   cancelCard,
   orderEntryCard,

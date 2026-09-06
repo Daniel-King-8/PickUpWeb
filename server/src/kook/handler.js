@@ -219,7 +219,9 @@ async function continuePublish(token, user) {
 /** 创建订单（规则同 Web 下单：取件码 50 位/地址 100 位/悬赏=基础+平台费） */
 async function createKookOrder(s) {
   const { user, feeRules } = s.data;
-  const { reward, fee } = calcFee(feeRules);
+  const base = calcFee(feeRules);
+  const reward = Number(s.data.reward) || base.reward; // 自定义悬赏（已校验）或默认最低
+  const fee = base.fee;
   const deliverPlace = `${s.data.destination || ''}${s.data.detail ? ` ${s.data.detail}` : ''}`;
   return Order.create({
     orderNo: generateOrderNo(),
@@ -324,8 +326,33 @@ async function sessionPhone(token, user, content) {
   const s = getSession(user.kookId);
   if (!s || s.state !== 'inputPhone') return;
   s.data.phone = content.slice(0, 20);
+  s.state = 'inputReward';
+  const min = 1 + Number(s.data.feeRules.platformFee || 0);
+  await dm(token, user.kookId, `💰 请输入悬赏金额（最低 ¥${min.toFixed(2)}，可加价加速接单，最高 500）：`);
+}
+
+/** 悬赏金额输入校验（同 Web 规则：≥最低、≤500） */
+async function sessionReward(token, user, content) {
+  const s = getSession(user.kookId);
+  if (!s || s.state !== 'inputReward') return;
+  const n = Number(String(content).trim().replace(/¥|元/g, ''));
+  const min = 1 + Number(s.data.feeRules.platformFee || 0);
+  if (Number.isNaN(n) || n < min) {
+    await dm(token, user.kookId, `金额不能低于 ¥${min.toFixed(2)}（基础¥1+平台费），请重新输入金额：`);
+    return;
+  }
+  if (n > 500) {
+    await dm(token, user.kookId, '悬赏金额最高 500 元，请重新输入金额：');
+    return;
+  }
+  s.data.reward = Number(n.toFixed(2));
   s.state = 'askRemark';
   s.data.remark = '';
+  await askRemarkCard(token, user);
+}
+
+/** 备注选项卡（选填/跳过） */
+async function askRemarkCard(token, user) {
   await dmCard(token, user.kookId, {
     type: 'card',
     theme: 'info',
@@ -418,15 +445,7 @@ async function useSaved(token, user) {
   s.data.phone = s.data.saved.contactPhone;
   s.state = 'askRemark';
   s.data.remark = '';
-  await dmCard(token, user.kookId, {
-    type: 'card',
-    theme: 'info',
-    modules: [
-      cards.header('📝 备注（选填）'),
-      { type: 'section', text: { type: 'plain-text', content: '直接发送文字填写备注，或选择无备注。' } },
-      { type: 'action-group', elements: [{ type: 'button', theme: 'primary', value: JSON.stringify({ act: 'skip-remark', id: 0 }), click: 'return-val', text: { type: 'plain-text', content: '⏭ 无备注' } }] },
-    ],
-  });
+  await askRemarkCard(token, user);
 }
 
 /** 分页换页：重新发送一页选项卡（更多/上一页按钮共用） */
@@ -635,6 +654,7 @@ async function routeEvent(event) {
       if (s.state === 'inputPickupCode') { await sessionPickupCode(cfg.token, u, content); return; }
       if (s.state === 'inputDetail') { await sessionDetail(cfg.token, u, content); return; }
       if (s.state === 'inputPhone') { await sessionPhone(cfg.token, u, content); return; }
+      if (s.state === 'inputReward') { await sessionReward(cfg.token, u, content); return; }
       if (s.state === 'askRemark') { await sessionRemark(cfg.token, u, content); return; }
       if (s.state === 'awaitScreenshot') {
         await dm(cfg.token, author_id, '请直接发送付款截图图片（转账成功页）；如不上传请点上方卡片按钮。');

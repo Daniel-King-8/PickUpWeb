@@ -19,6 +19,8 @@ const cards = require('./cards');
 const sentCheckCards = new Map();
 /** 已发送的"大厅"卡片索引：orderId -> { channelId, msgId }，被抢单后更新为"已被接单" */
 const sentHallCards = new Map();
+/** 已发送给雇主的"已送达"卡片：orderId -> msgId，雇主确认后更新为「已完成」 */
+const sentDeliveredCards = new Map();
 /** 通知串行队列：同一订单的 PAID(发卡记录 msg_id) 与 ACCEPTED(更新卡) 须按调用顺序执行，否则可能竞态丢更新 */
 let notifyChain = Promise.resolve();
 
@@ -106,10 +108,10 @@ async function sendCard(token, targetId, card) {
   return sendMessage(token, targetId, 10, JSON.stringify([card]));
 }
 
-/** 向用户发卡片/文本（user.kookId 为空则跳过；私信走 direct-message 专用接口） */
+/** 向用户发卡片/文本（user.kookId 为空则跳过；私信走 direct-message 专用接口；卡片返回 msg_id） */
 async function dmCard(token, user, card) {
-  if (!user || !user.kookId) return;
-  await sendDirectMessage(token, user.kookId, 10, JSON.stringify([card]));
+  if (!user || !user.kookId) return null;
+  return sendDirectMessage(token, user.kookId, 10, JSON.stringify([card]));
 }
 async function dmText(token, user, text) {
   if (!user || !user.kookId) return;
@@ -225,11 +227,19 @@ async function doNotifyOrderEvent(transition, data) {
       }
       case 'DELIVERED': {
         const photo = await uploadForCard(cfg.token, order.deliveryPhoto);
-        await dmCard(cfg.token, publisher, cards.employerDeliveredCard(order, photo));
+        const deliveredMsgId = await dmCard(cfg.token, publisher, cards.employerDeliveredCard(order, photo));
+        if (deliveredMsgId) sentDeliveredCards.set(order.id, deliveredMsgId);
         await dmText(cfg.token, runner, '📬 已标记送达，等待雇主确认收货');
         break;
       }
       case 'CONFIRMED': {
+        // 更新雇主的「已送达」卡片 → 「已完成」（确认按钮消失）+ 雇主回执
+        const deliveredMsgId = sentDeliveredCards.get(order.id);
+        if (deliveredMsgId) {
+          await updateMessage(cfg.token, deliveredMsgId, JSON.stringify([cards.employerConfirmedCard(order)]));
+          sentDeliveredCards.delete(order.id);
+        }
+        await dmText(cfg.token, publisher, '✅ 已确认收到，本单完成，感谢使用！');
         await dmCard(cfg.token, runner, cards.runnerConfirmedCard(order));
         break;
       }
