@@ -4,6 +4,7 @@
  * 所有调用失败返回 null 不抛出，由调用方决定降级（日志/跳过）。
  * 统一鉴权头：Authorization: Bot <token>
  */
+const fs = require('fs');
 const BASE = 'https://www.kookapp.cn/api/v3';
 
 /**
@@ -113,4 +114,21 @@ async function getMe(token) {
   return res && res.data ? res.data : null;
 }
 
-module.exports = { getGateway, sendMessage, sendDirectMessage, updateMessage, uploadAsset, getMe };
+/**
+ * 把本地 UPLOAD_DIR 下的 /uploads/xxx 文件上传为 Kook 素材（收款码/付款截图等）
+ * @returns {Promise<string|null>} Kook 可用 URL 或 null
+ */
+async function uploadLocalAsset(token, url) {
+  if (!url) return null;
+  try {
+    const path = require('path');
+    const dir = process.env.UPLOAD_DIR || path.join(__dirname, '../data/uploads');
+    const filePath = path.join(dir, path.basename(url));
+    if (!fs.existsSync(filePath)) return null;
+    return uploadAsset(token, filePath);
+  } catch (e) {
+    return null;
+  }
+}
+
+module.exports = { getGateway, sendMessage, sendDirectMessage, updateMessage, uploadAsset, uploadLocalAsset, getMe };

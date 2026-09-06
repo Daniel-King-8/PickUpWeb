@@ -16,6 +16,7 @@ const KEYS = {
   guild: 'kookGuildId',
   hall: 'kookHallChannelId',
   admin: 'kookAdminChannelId',
+  order: 'kookOrderChannelId',
 };
 
 /**
@@ -33,6 +34,7 @@ async function getKookConfig() {
     guildId: map[KEYS.guild] || process.env.KOOK_GUILD_ID || '',
     hallChannelId: map[KEYS.hall] || process.env.KOOK_HALL_CHANNEL_ID || '',
     adminChannelId: map[KEYS.admin] || process.env.KOOK_ADMIN_CHANNEL_ID || '',
+    orderChannelId: map[KEYS.order] || process.env.KOOK_ORDER_CHANNEL_ID || '',
   };
 }
 

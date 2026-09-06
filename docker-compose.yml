@@ -29,6 +29,7 @@ services:
       - KOOK_BOT_TOKEN=${KOOK_BOT_TOKEN:-}
       - KOOK_HALL_CHANNEL_ID=${KOOK_HALL_CHANNEL_ID:-}
       - KOOK_ADMIN_CHANNEL_ID=${KOOK_ADMIN_CHANNEL_ID:-}
+      - KOOK_ORDER_CHANNEL_ID=${KOOK_ORDER_CHANNEL_ID:-}
       # 时区：按中国时间切"每日结算"
       - TZ=Asia/Shanghai
     volumes:

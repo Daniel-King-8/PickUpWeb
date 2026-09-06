@@ -354,6 +354,7 @@
         <van-field v-model="kookForm.guildId" label="服务器 ID" placeholder="选填，展示用" />
         <van-field v-model="kookForm.hallChannelId" label="接单大厅频道 id" placeholder="#接单大厅 的频道 id" />
         <van-field v-model="kookForm.adminChannelId" label="订单待确定频道 id" placeholder="#订单待确定 的频道 id" />
+        <van-field v-model="kookForm.orderChannelId" label="下单频道 id" placeholder="#下单频道（机器人发布下单入口卡，用户点按钮私信交互下单）" />
         <van-button class="save-btn" round block type="primary" @click="saveKookConfig">保存配置</van-button>
         <div class="kook-help">
           📌 使用步骤：Kook 开发者中心创建机器人并拿到 Token → 邀请机器人进你的服务器 → 右键子频道复制 ID（开发者中心「频道管理」可见）→ 保存配置 → 点下方测试
@@ -363,6 +364,8 @@
       <van-cell-group inset title="对接测试" class="mt-3">
         <van-button round block plain type="primary" :loading="kookTesting" @click="testKook">向「订单待确定」频道发送测试消息</van-button>
         <div class="kook-help">测试成功后：用户在网站下单并上传付款截图 → 机器人自动在「订单待确定」发卡片 → 点【确认到账并发布】→ 订单出现在「接单大厅」</div>
+        <van-button round block plain type="primary" :loading="kookEntrySending" @click="sendKookEntry" class="mt-2">向「下单频道」发送下单入口卡</van-button>
+        <div class="kook-help">入口卡带【🎯 下单】按钮：用户点按钮后，机器人私信逐步引导完成下单（站点→取件码→目的地→付款），无需再上网页</div>
       </van-cell-group>
 
       <!-- 绑定当前管理员账号（管理员无「我的」页，绑定入口放后台） -->
@@ -648,6 +651,7 @@ async function saveContact() {
 /* ---------- Kook 对接 ---------- */
 const kookStatus = ref({});
 const kookTesting = ref(false);
+const kookEntrySending = ref(false);
 // 当前管理员 Kook 绑定（管理员无「我的」页，绑定入口放后台）
 const adminKookBound = ref(false);
 const adminKookId = ref('');
@@ -673,7 +677,7 @@ async function adminUnbindKook() {
   loadAdminKook();
 }
 // token 不回显明文（password 输入框留空不修改），其余配置回显
-const kookForm = reactive({ token: '', guildId: '', hallChannelId: '', adminChannelId: '' });
+const kookForm = reactive({ token: '', guildId: '', hallChannelId: '', adminChannelId: '', orderChannelId: '' });
 
 async function loadKookStatus() {
   const res = await api.get('/admin/kook/status');
@@ -681,6 +685,7 @@ async function loadKookStatus() {
   kookForm.guildId = res.data.guildId || '';
   kookForm.hallChannelId = res.data.hallChannelId || '';
   kookForm.adminChannelId = res.data.adminChannelId || '';
+  kookForm.orderChannelId = res.data.orderChannelId || '';
 }
 
 /** 保存配置：token 留空则跳过不改动；频道 id 允许清空 */
@@ -692,6 +697,7 @@ async function saveKookConfig() {
   saves.push(api.put('/admin/settings', { key: 'kookGuildId', value: kookForm.guildId.trim() }));
   saves.push(api.put('/admin/settings', { key: 'kookHallChannelId', value: kookForm.hallChannelId.trim() }));
   saves.push(api.put('/admin/settings', { key: 'kookAdminChannelId', value: kookForm.adminChannelId.trim() }));
+  saves.push(api.put('/admin/settings', { key: 'kookOrderChannelId', value: kookForm.orderChannelId.trim() }));
   await Promise.all(saves);
   showSuccessToast('Kook 配置已保存');
   loadKookStatus();
@@ -704,6 +710,16 @@ async function testKook() {
     showSuccessToast('测试消息已发送，请到「订单待确定」频道查看');
   } finally {
     kookTesting.value = false;
+  }
+}
+
+async function sendKookEntry() {
+  kookEntrySending.value = true;
+  try {
+    await api.post('/admin/kook/send-entry');
+    showSuccessToast('下单入口卡已发送，请到「下单频道」查看');
+  } finally {
+    kookEntrySending.value = false;
   }
 }
 

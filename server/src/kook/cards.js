@@ -196,18 +196,33 @@ const runnerAcceptedCard = (order, employerName) => ({
   ],
 });
 
-/** 抢单成功 → DM 雇主：谁接了单 */
-const employerAcceptedCard = (order, runnerName) => ({
-  type: 'card',
-  theme: 'info',
-  modules: [
-    header('🎉 你的悬赏已被接拍'),
-    section(
-      `跑腿员：**${runnerName}**\n路线：${order.station} → ${order.deliverPlace}\n单号：${order.orderNo}`
-    ),
-    context('等待跑腿员送达后，你会收到确认提醒'),
-  ],
-});
+/** 抢单成功 → DM 雇主：谁接了单（含猎人 ID/电话，方便联系确认） */
+const employerAcceptedCard = (order, runnerUser) => {
+  const name = runnerUser ? runnerUser.nickname || runnerUser.username : '未知用户';
+  const uid = runnerUser && runnerUser.uid ? runnerUser.uid : (runnerUser ? String(runnerUser.id) : '—');
+  const phone = runnerUser && runnerUser.phone ? runnerUser.phone : '未填';
+  return {
+    type: 'card',
+    theme: 'info',
+    modules: [
+      header('🎉 你的悬赏已被接拍'),
+      {
+        type: 'section',
+        text: {
+          type: 'plain-text',
+          content: [
+            `赏金猎人：${name}`,
+            `ID：${uid}`,
+            `电话：${phone}`,
+            `路线：${order.station} → ${order.deliverPlace}`,
+            `单号：${order.orderNo}`,
+          ].join('\n'),
+        },
+      },
+      context('可私聊猎人确认送取事项；送达后你会收到确认提醒'),
+    ],
+  };
+};
 
 /** 送达 → DM 雇主：确认收货按钮（有照片则带图） */
 const employerDeliveredCard = (order, photoUrl) => {
@@ -247,6 +262,127 @@ const cancelCard = (order, reason) => ({
   ],
 });
 
+/* ================= 交互式下单（Kook 私信） ================= */
+
+/** 下单频道入口卡（固定发布，带【🎯 下单】按钮） */
+const orderEntryCard = () => ({
+  type: 'card',
+  theme: 'primary',
+  modules: [
+    header('📦 发布悬赏'),
+    { type: 'section', text: { type: 'plain-text', content: '点击下方按钮开始下单，机器人会在私信里逐步引导你完成。' } },
+    actionGroup([button('🎯 下单', 'primary', 'publish-start', 0)]),
+  ],
+});
+
+/** 选项卡（站点/目的地等按钮列表，最多 4 个按钮） */
+const pickCard = (title, names, act) => ({
+  type: 'card',
+  theme: 'info',
+  modules: [
+    header(title),
+    actionGroup(names.slice(0, 4).map((n) => button(n, 'primary', act, n))),
+  ],
+});
+
+/** 付款卡：收款码 + 管理员微信 + 金额 + 【我已确认付款】 */
+const payCard = (order, payInfo) => {
+  const lines = [
+    `订单号：${order.orderNo}`,
+    `取件驿站：${order.station}`,
+    `送达地址：${order.deliverPlace}`,
+    `悬赏金额：**¥${Number(order.reward).toFixed(2)}**`,
+  ];
+  if (payInfo.contactWechat) lines.push(`管理员微信：${payInfo.contactWechat}`);
+  const modules = [
+    { type: 'header', text: { type: 'plain-text', content: `💳 请支付 ¥${Number(order.reward).toFixed(2)}` } },
+    { type: 'section', text: { type: 'kmarkdown', content: lines.join('\n') } },
+  ];
+  const qr = payInfo.payQrWx || payInfo.payQrAlipay;
+  if (qr) modules.push({ type: 'image-group', elements: [{ type: 'image', src: qr }] });
+  modules.push(
+    {
+      type: 'context',
+      elements: [{ type: 'plain-text', content: payInfo.contactWechat ? '扫码或添加管理员微信转账，转账备注订单号' : '请扫码转账，备注订单号' }],
+    },
+    actionGroup([button('✅ 我已确认付款', 'success', 'confirm-pay', order.id)])
+  );
+  return { type: 'card', theme: 'warning', modules };
+};
+
+/** 是否上传付款截图 */
+const screenshotAskCard = (orderId) => ({
+  type: 'card',
+  theme: 'info',
+  modules: [
+    header('📸 是否愿意上传付款截图？'),
+    { type: 'section', text: { type: 'plain-text', content: '上传截图可加速管理员核对；不上传则管理员核对收款记录后同样会确认。' } },
+    actionGroup([
+      button('✔ 愿意，上传截图', 'primary', 'upload-shot-yes', orderId),
+      button('✖ 不愿意', 'secondary', 'upload-shot-no', orderId),
+    ]),
+  ],
+});
+
+/** 下单完成（等待管理员审核） */
+const publishDoneCard = (order) => ({
+  type: 'card',
+  theme: 'success',
+  modules: [
+    header('✅ 下单成功，等待管理员审核'),
+    {
+      type: 'section',
+      text: {
+        type: 'plain-text',
+        content: [
+          `订单号：${order.orderNo}`,
+          `金额：¥${Number(order.reward).toFixed(2)}`,
+          `审核通过后订单将发布到接单大厅，会私信通知你。`,
+        ].join('\n'),
+      },
+    },
+    context('订单详情可随时咨询管理员'),
+  ],
+});
+
+/** 审核完成 → 雇主（发布大厅前可取消；已接单后取消需退款） */
+const publisherPaidCard = (order) => ({
+  type: 'card',
+  theme: 'success',
+  modules: [
+    header('✅ 审核完成，订单已上架'),
+    {
+      type: 'section',
+      text: {
+        type: 'plain-text',
+        content: [
+          `订单号：${order.orderNo}`,
+          `你的悬赏已发布到接单大厅，赏金猎人即将接单。`,
+        ].join('\n'),
+      },
+    },
+    actionGroup([button('🛑 取消订单', 'danger', 'cancel-own', order.id)]),
+  ],
+});
+
+/** 取消后退款提示（发送管理员微信号） */
+const cancelRefundCard = (contactWechat) => ({
+  type: 'card',
+  theme: 'danger',
+  modules: [
+    header('🧾 订单已取消'),
+    {
+      type: 'section',
+      text: {
+        type: 'plain-text',
+        content: contactWechat
+          ? `请在付款后 24 小时内联系管理员退款：${contactWechat}`
+          : '请及时联系管理员处理退款事宜',
+      },
+    },
+  ],
+});
+
 module.exports = {
   encodeBtn,
   decodeBtn,
@@ -260,4 +396,11 @@ module.exports = {
   employerDeliveredCard,
   runnerConfirmedCard,
   cancelCard,
+  orderEntryCard,
+  pickCard,
+  payCard,
+  screenshotAskCard,
+  publishDoneCard,
+  publisherPaidCard,
+  cancelRefundCard,
 };

@@ -33,6 +33,22 @@ async function start() {
   if (me && me.id) handler.setBotId(me.id);
   client.onEvent(handler.routeEvent);
   await client.start();
+  // 配置了下单频道则发布一条固定入口卡（重启会重复发送，频道内旧卡可手动删除）
+  await sendOrderEntry();
+}
+
+/** 向「下单频道」发送下单入口卡（重启自动/后台可手动触发） */
+async function sendOrderEntry() {
+  try {
+    const cfg = await getKookConfig();
+    if (!cfg.token || !cfg.orderChannelId) return false;
+    const msgId = await sendMessage(cfg.token, cfg.orderChannelId, 10, JSON.stringify([cards.orderEntryCard()]));
+    console.log('[kook] 下单入口卡已发送:', !!msgId);
+    return !!msgId;
+  } catch (e) {
+    console.warn('[kook] 发送下单入口卡失败:', e.message);
+    return false;
+  }
 }
 
 /** 优雅停止（进程退出时） */
@@ -55,6 +71,7 @@ async function status() {
     guildId: cfg.guildId,
     hallChannelId: cfg.hallChannelId,
     adminChannelId: cfg.adminChannelId,
+    orderChannelId: cfg.orderChannelId,
     bindCodeCount: handler.bindCodeCount(),
     ...client.status(),
   };
@@ -191,6 +208,8 @@ async function doNotifyOrderEvent(transition, data) {
         // 大厅卡片（记录 msg_id，供抢单后更新为"已被接单"）
         const hallMsgId = await sendCard(cfg.token, cfg.hallChannelId, cards.hallCard(order, pubName));
         if (hallMsgId) sentHallCards.set(order.id, { channelId: cfg.hallChannelId, msgId: hallMsgId });
+        // 雇主私信：审核通过 + 「取消订单」按钮（未接单前可取消）
+        await dmCard(cfg.token, publisher, cards.publisherPaidCard(order));
         break;
       }
       case 'ACCEPTED': {
@@ -201,7 +220,7 @@ async function doNotifyOrderEvent(transition, data) {
           sentHallCards.delete(order.id);
         }
         await dmCard(cfg.token, runner, cards.runnerAcceptedCard(order, pubName));
-        await dmCard(cfg.token, publisher, cards.employerAcceptedCard(order, runName));
+        await dmCard(cfg.token, publisher, cards.employerAcceptedCard(order, runner));
         break;
       }
       case 'DELIVERED': {
@@ -228,4 +247,4 @@ async function doNotifyOrderEvent(transition, data) {
   }
 }
 
-module.exports = { start, stop, createBindCode, status, sendTest, notifyOrderEvent };
+module.exports = { start, stop, createBindCode, status, sendTest, sendOrderEntry, notifyOrderEvent };

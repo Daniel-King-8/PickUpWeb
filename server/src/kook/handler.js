@@ -12,10 +12,12 @@
  *
  * 所有处理函数吞错只打日志：任何事件异常不得影响进程与后续事件。
  */
-const { User } = require('../models');
+const { User, Order, Setting } = require('../models');
 const { getKookConfig } = require('./config');
-const { sendDirectMessage } = require('./api');
-const { decodeBtn } = require('./cards');
+const { sendDirectMessage, uploadLocalAsset } = require('./api');
+const cards = require('./cards');
+const { decodeBtn } = cards;
+const { calcFee, generateOrderNo, normalizeFeeRules } = require('../utils/helpers');
 // 注意：orderService 须在函数内惰性 require（handler ← orderService ← kook/index ← handler 存在循环依赖，
 // 顶部 require 会在对手模块尚未完成时拿到空对象导致 "xxx is not a function"）
 
@@ -84,6 +86,308 @@ async function handleBind(token, kookUserId, code) {
   return dm(token, kookUserId, `✅ 绑定成功！「${user.username}」— 现在你可以在 Kook 里接单/处理订单了。`);
 }
 
+/* ================= 交互式下单（私信会话状态机） ================= */
+
+const SESSION_TTL = 15 * 60 * 1000; // 15 分钟无操作会话过期
+/** kookId -> { state, data, expireAt } */
+const sessions = new Map();
+
+function getSession(kookId) {
+  const s = sessions.get(kookId);
+  if (!s || s.expireAt < Date.now()) {
+    sessions.delete(kookId);
+    return null;
+  }
+  return s;
+}
+function setSession(kookId, state, data) {
+  const s = { state, data, expireAt: Date.now() + SESSION_TTL };
+  sessions.set(kookId, s);
+  return s;
+}
+function endSession(kookId) {
+  sessions.delete(kookId);
+}
+
+/** 向用户发私信卡片 */
+async function dmCard(token, kookId, card) {
+  await sendDirectMessage(token, kookId, 10, JSON.stringify([card]));
+}
+
+/** 读当前校区费率 */
+async function readFeeRules(campus) {
+  const s = await Setting.findOne({ where: { key: 'feeRules' } });
+  if (!s) return null;
+  try {
+    return normalizeFeeRules(JSON.parse(s.value), campus);
+  } catch (e) {
+    return null;
+  }
+}
+/** 读收款信息（收款码 + 管理员微信） */
+async function readPayInfo() {
+  const [wx, ali, contact] = await Promise.all([
+    Setting.findOne({ where: { key: 'payQrWx' } }),
+    Setting.findOne({ where: { key: 'payQrAlipay' } }),
+    Setting.findOne({ where: { key: 'contactWechat' } }),
+  ]);
+  return {
+    payQrWx: wx ? wx.value : '',
+    payQrAlipay: ali ? ali.value : '',
+    contactWechat: contact ? contact.value : '',
+  };
+}
+
+/** 下单入口（🎯 下单）：校验校区/费率，记忆最近收货信息 */
+async function startPublish(token, user) {
+  if (!user.campus) {
+    await dm(token, user.kookId, '请先到网页「我的-绑定校区」选择校区后，才能发布悬赏');
+    return;
+  }
+  const feeRules = await readFeeRules(user.campus);
+  if (!feeRules || !feeRules.stations || !feeRules.stations.length) {
+    await dm(token, user.kookId, '费率未配置，请联系管理员');
+    return;
+  }
+  const s = setSession(user.kookId, 'chooseStation', { user, feeRules, saved: {} });
+  // 记忆：该用户最近一单的目的地/电话（与 Web 端 localStorage 习惯一致）
+  const last = await Order.findOne({
+    where: { publisherId: user.id },
+    attributes: ['deliverPlace', 'contactPhone'],
+    order: [['id', 'DESC']],
+  });
+  if (last) {
+    s.data.saved.deliverPlace = last.deliverPlace || '';
+    s.data.saved.contactPhone = last.contactPhone || '';
+  }
+  await dmCard(token, user.kookId, cards.pickCard('🏬 请选择快递站点：', feeRules.stations, 'pick-station'));
+}
+
+/** 创建订单（规则同 Web 下单：取件码 50 位/地址 100 位/悬赏=基础+平台费） */
+async function createKookOrder(s) {
+  const { user, feeRules } = s.data;
+  const { reward, fee } = calcFee(feeRules);
+  const deliverPlace = `${s.data.destination || ''}${s.data.detail ? ` ${s.data.detail}` : ''}`;
+  return Order.create({
+    orderNo: generateOrderNo(),
+    campus: user.campus,
+    station: String(s.data.station).slice(0, 50),
+    pickupCode: String(s.data.pickupCode).slice(0, 50),
+    deliverPlace: String(deliverPlace).slice(0, 100),
+    contactPhone: String(s.data.phone).slice(0, 20),
+    remark: String(s.data.remark || '').slice(0, 255),
+    reward,
+    fee,
+    status: 'PAYING',
+    publisherId: user.id,
+  });
+}
+
+/** 完成下单：发完成卡；有截图则更新管理员待核对卡（补图） */
+async function finishPublish(token, kookId, order, hasShot) {
+  await dmCard(token, kookId, cards.publishDoneCard(order));
+  if (hasShot) {
+    const kookDoor = require('./index'); // 惰性加载
+    kookDoor.notifyOrderEvent('PAY_UPLOADED', order.id);
+  }
+  endSession(kookId);
+}
+
+/** 发送付款卡（收款码转 Kook 素材 + 微信 + 金额 + 【我已确认付款】） */
+async function sendPayCard(token, kookId, order) {
+  const payInfo = await readPayInfo();
+  const cfg = await getKookConfig();
+  let qr = '';
+  if (cfg.token) {
+    qr = (await uploadLocalAsset(cfg.token, payInfo.payQrWx || payInfo.payQrAlipay)) || '';
+  }
+  await dmCard(token, kookId, cards.payCard(order, { ...payInfo, payQrWx: qr, payQrAlipay: qr, contactWechat: payInfo.contactWechat }));
+}
+
+/* ---------- 会话推进（按钮/文本/图片各自触发） ---------- */
+
+async function sessionPickStation(token, user, station) {
+  const s = getSession(user.kookId);
+  if (!s || s.state !== 'chooseStation') return;
+  s.state = 'inputPickupCode';
+  s.data.station = station;
+  await dm(token, user.kookId, '📋 请发送取件码（多个取件码用逗号隔开）：');
+}
+
+async function sessionPickupCode(token, user, content) {
+  const s = getSession(user.kookId);
+  if (!s || s.state !== 'inputPickupCode') return;
+  s.data.pickupCode = content.slice(0, 50);
+  s.state = 'confirmInfo';
+  if (s.data.saved.deliverPlace && s.data.saved.contactPhone) {
+    await dm(token, user.kookId, `历史收货信息：\n送达：${s.data.saved.deliverPlace}\n电话：${s.data.saved.contactPhone}`);
+    await dmCard(token, user.kookId, {
+      type: 'card',
+      theme: 'info',
+      modules: [
+        header('确认收货信息'),
+        {
+          type: 'section',
+          text: { type: 'plain-text', content: '是否使用以上信息直接下单？' },
+        },
+        {
+          type: 'action-group',
+          elements: [
+            { type: 'button', theme: 'success', value: JSON.stringify({ act: 'use-saved' }), click: 'return-val', text: { type: 'plain-text', content: '✔ 不更改，直接使用' } },
+            { type: 'button', theme: 'warning', value: JSON.stringify({ act: 'change-info' }), click: 'return-val', text: { type: 'plain-text', content: '🔄 更改' } },
+          ],
+        },
+      ],
+    });
+  } else {
+    await askDestination(token, user);
+  }
+}
+
+async function askDestination(token, user) {
+  const s = getSession(user.kookId);
+  if (!s) return;
+  s.state = 'chooseDestination';
+  await dmCard(token, user.kookId, cards.pickCard('🏨 请选择目的地：', s.data.feeRules.destinations || [], 'pick-destination'));
+}
+
+async function sessionPickDestination(token, user, dest) {
+  const s = getSession(user.kookId);
+  if (!s || s.state !== 'chooseDestination') return;
+  s.state = 'inputDetail';
+  s.data.destination = dest;
+  await dm(token, user.kookId, '🏠 请输入详细地址（例如房间号：302 / A栋）：');
+}
+
+async function sessionDetail(token, user, content) {
+  const s = getSession(user.kookId);
+  if (!s || s.state !== 'inputDetail') return;
+  s.data.detail = content.slice(0, 20);
+  s.state = 'inputPhone';
+  await dm(token, user.kookId, '📱 请输入联系电话（跑腿员接单后联系使用）：');
+}
+
+async function sessionPhone(token, user, content) {
+  const s = getSession(user.kookId);
+  if (!s || s.state !== 'inputPhone') return;
+  s.data.phone = content.slice(0, 20);
+  s.state = 'askRemark';
+  s.data.remark = '';
+  await dmCard(token, user.kookId, {
+    type: 'card',
+    theme: 'info',
+    modules: [
+      header('📝 备注（选填）'),
+      { type: 'section', text: { type: 'plain-text', content: '直接发送文字填写备注（如：大件/需轻放），或选择无备注。' } },
+      { type: 'action-group', elements: [{ type: 'button', theme: 'primary', value: JSON.stringify({ act: 'skip-remark' }), click: 'return-val', text: { type: 'plain-text', content: '⏭ 无备注' } }] },
+    ],
+  });
+}
+
+async function sessionRemark(token, user, content) {
+  const s = getSession(user.kookId);
+  if (!s || s.state !== 'askRemark') return;
+  s.data.remark = content.slice(0, 255);
+  await kookSubmitOrder(token, user);
+}
+
+/** 提交订单 → 通知管理员 + 发付款卡 */
+async function kookSubmitOrder(token, user) {
+  const s = getSession(user.kookId);
+  if (!s || !s.data.pickupCode) return;
+  try {
+    const order = await createKookOrder(s);
+    s.state = 'awaitConfirmPay';
+    s.data.orderId = order.id;
+    const kookDoor = require('./index');
+    kookDoor.notifyOrderEvent('NEW_ORDER', order.id); // 管理员待核对卡
+    await sendPayCard(token, user.kookId, order);
+  } catch (e) {
+    console.warn('[kook] 交互下单失败:', e.message);
+    await dm(token, user.kookId, '下单失败，请稍后重试');
+  }
+}
+
+async function confirmPaid(token, user, orderId) {
+  const s = getSession(user.kookId);
+  if (!s || s.state !== 'awaitConfirmPay' || s.data.orderId !== orderId) return;
+  s.state = 'askShot';
+  await dmCard(token, user.kookId, cards.screenshotAskCard(orderId));
+}
+
+async function askImage(token, user, orderId) {
+  const s = getSession(user.kookId);
+  if (!s || s.state !== 'askShot' || s.data.orderId !== orderId) return;
+  s.state = 'awaitScreenshot';
+  await dm(token, user.kookId, '📤 请发送付款截图图片（转账成功页面）：');
+}
+
+/** 收到图片（type=2）且处于等待截图 → 下载保存 + 完成；返回是否消费了该图片 */
+async function saveShot(token, user, imageUrl) {
+  const s = getSession(user.kookId);
+  if (!s || s.state !== 'awaitScreenshot') return false;
+  const { orderId } = s.data;
+  try {
+    const path = require('path');
+    const fs = require('fs');
+    const dir = process.env.UPLOAD_DIR || path.join(__dirname, '../data/uploads');
+    fs.mkdirSync(dir, { recursive: true });
+    const resp = await fetch(imageUrl);
+    if (resp.ok) {
+      const buf = Buffer.from(await resp.arrayBuffer());
+      const name = `kook-shot-${Date.now()}.png`;
+      fs.writeFileSync(path.join(dir, name), buf);
+      const order = await Order.findByPk(orderId);
+      if (order) await order.update({ payerScreenshot: `/uploads/${name}` });
+    }
+  } catch (e) {
+    console.warn('[kook] 下载付款截图失败:', e.message);
+  }
+  const order = await Order.findByPk(orderId);
+  if (order) await finishPublish(token, user.kookId, order, true);
+  else endSession(user.kookId);
+  return true;
+}
+
+async function notUpload(token, user, orderId) {
+  const s = getSession(user.kookId);
+  if (!s || s.state !== 'askShot' || s.data.orderId !== orderId) return;
+  const order = await Order.findByPk(orderId);
+  if (order) await finishPublish(token, user.kookId, order, false);
+}
+
+/** 使用保存的收货信息直接下单（跳到备注） */
+async function useSaved(token, user) {
+  const s = getSession(user.kookId);
+  if (!s || s.state !== 'confirmInfo') return;
+  s.data.destination = s.data.saved.deliverPlace;
+  s.data.detail = '';
+  s.data.phone = s.data.saved.contactPhone;
+  s.state = 'askRemark';
+  s.data.remark = '';
+  await dmCard(token, user.kookId, {
+    type: 'card',
+    theme: 'info',
+    modules: [
+      header('📝 备注（选填）'),
+      { type: 'section', text: { type: 'plain-text', content: '直接发送文字填写备注，或选择无备注。' } },
+      { type: 'action-group', elements: [{ type: 'button', theme: 'primary', value: JSON.stringify({ act: 'skip-remark' }), click: 'return-val', text: { type: 'plain-text', content: '⏭ 无备注' } }] },
+    ],
+  });
+}
+
+/** 雇主取消订单（审核完成卡上的取消按钮）→ 退款提示 */
+async function cancelOwnOrder(token, user, orderId) {
+  const orderService = require('../services/orderService');
+  const res = await orderService.cancelOrderByUser(orderId, user);
+  if (!res.ok) {
+    await dm(token, user.kookId, res.message || '当前状态不允许操作');
+    return;
+  }
+  const payInfo = await readPayInfo();
+  await dmCard(token, user.kookId, cards.cancelRefundCard(payInfo.contactWechat));
+}
+
 /* ---------- 按钮点击 ---------- */
 
 /**
@@ -121,16 +425,39 @@ const FAIL_TEXT = {
 };
 
 async function handleButton(token, clicker, buttons) {
+  const FLOW_ACTS = ['publish-start', 'pick-station', 'pick-destination', 'use-saved', 'change-info', 'skip-remark', 'confirm-pay', 'upload-shot-yes', 'upload-shot-no', 'cancel-own'];
+  const ORDER_ACTS = ['accept', 'deliver', 'confirm', 'mark-paid', 'delete-order'];
   for (const btn of buttons) {
     const payload = decodeBtn(btn.value);
     if (!payload) continue;
     const { act, id } = payload;
-    if (!['accept', 'deliver', 'confirm', 'mark-paid', 'delete-order'].includes(act)) continue;
+    if (!ORDER_ACTS.includes(act) && !FLOW_ACTS.includes(act)) continue;
 
     // 点击者身份：kookId → 平台用户
     const user = await User.findOne({ where: { kookId: clicker } });
     if (!user) {
       await dm(token, clicker, '请先到网页「我的-绑定Kook」绑定账号后再操作');
+      continue;
+    }
+
+    // 交互下单流程（非状态迁移按钮，id 参数为站点名/目的地名/订单 id 等）
+    if (FLOW_ACTS.includes(act)) {
+      try {
+        switch (act) {
+          case 'publish-start': await startPublish(token, user); break;
+          case 'pick-station': await sessionPickStation(token, user, id); break;
+          case 'pick-destination': await sessionPickDestination(token, user, id); break;
+          case 'use-saved': await useSaved(token, user); break;
+          case 'change-info': await askDestination(token, user); break;
+          case 'skip-remark': await kookSubmitOrder(token, user); break;
+          case 'confirm-pay': await confirmPaid(token, user, id); break;
+          case 'upload-shot-yes': await askImage(token, user, id); break;
+          case 'upload-shot-no': await notUpload(token, user, id); break;
+          case 'cancel-own': await cancelOwnOrder(token, user, id); break;
+        }
+      } catch (e) {
+        console.warn('[kook] 流程按钮异常:', e.message);
+      }
       continue;
     }
     // 核对/删除权限：admin 或 小管理员（小管理员仅 Kook 内操作，无 Web 后台）
@@ -216,10 +543,32 @@ async function routeEvent(event) {
       await dm(cfg.token, author_id, '绑定指引：打开网页「我的 → 绑定Kook」生成 6 位绑定码，回复「绑定 123456」即可完成绑定。');
       return;
     }
+    // 交互下单会话推进（绑定/帮助指令优先匹配）
+    const s = getSession(author_id);
+    if (s) {
+      const u = s.data.user;
+      if (s.state === 'inputPickupCode') { await sessionPickupCode(cfg.token, u, content); return; }
+      if (s.state === 'inputDetail') { await sessionDetail(cfg.token, u, content); return; }
+      if (s.state === 'inputPhone') { await sessionPhone(cfg.token, u, content); return; }
+      if (s.state === 'askRemark') { await sessionRemark(cfg.token, u, content); return; }
+      if (s.state === 'awaitScreenshot') {
+        await dm(cfg.token, author_id, '请直接发送付款截图图片（转账成功页）；如不上传请点上方卡片按钮。');
+        return;
+      }
+      if (['confirmInfo', 'askShot', 'awaitConfirmPay'].includes(s.state)) {
+        await dm(cfg.token, author_id, '请点击上方卡片按钮继续操作');
+        return;
+      }
+    }
     // 群聊未匹配指令静默；私聊未匹配简洁提示
     if (channel_type === 'PERSON') {
       await dm(cfg.token, author_id, '回复「绑定 123456」可绑定取个件呗账号，或回复「帮助」查看指引。');
     }
+    return;
+  }
+  // 图片消息：交互下单等待付款截图时接收（type=2，content 为图片 URL）
+  if (type === 2) {
+    await saveShot(cfg.token, author_id, event.content || '');
   }
 }
 
