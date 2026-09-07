@@ -517,13 +517,18 @@ const FAIL_TEXT = {
   NOT_PAYING: '订单状态不是待支付（可能已核销）',
 };
 
-/** Kook 会对同一按钮点击重投事件（同 msg_id），按 msg_id 去重防止重复触发 */
-const processedBtnMsgIds = new Set();
+/**
+ * Kook 会对同一按钮点击重投事件（同 msg_id，几秒内多条）→ 60 秒窗口去重即可：
+ * 重投被吞（防重复执行），但用户稍后再点同一张卡片按钮仍然有效
+ * （此前永久去重导致"点过的卡作废、只能点新卡"的 bug）
+ */
+const processedBtnMsgIds = new Map(); // msgId -> expireAt
 function isNewBtnMsg(msgId) {
   if (!msgId) return true;
-  if (processedBtnMsgIds.has(msgId)) return false;
-  processedBtnMsgIds.add(msgId);
-  if (processedBtnMsgIds.size > 800) processedBtnMsgIds.clear(); // 防内存无限增长
+  const exp = processedBtnMsgIds.get(msgId);
+  if (exp && exp > Date.now()) return false;
+  processedBtnMsgIds.set(msgId, Date.now() + 60 * 1000);
+  if (processedBtnMsgIds.size > 1000) processedBtnMsgIds.clear(); // 防内存无限增长
   return true;
 }
 
