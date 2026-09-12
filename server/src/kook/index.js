@@ -61,6 +61,8 @@ async function sendOrderEntry() {
 
 let keepAliveTimer = null;
 let keepAliveLastMsgId = null;
+let keepAliveLastSentAt = 0; // 节流用（10 秒内最多一条）
+let reconnectKeepAliveTimer = null; // 保活重连定时器（注册前先清理，防叠加）
 
 /**
  * 向后台指定的「保活测试频道」发送一条"机器人在线"消息：
@@ -70,6 +72,8 @@ let keepAliveLastMsgId = null;
  */
 async function sendKeepAlive() {
   try {
+    // 节流保险：10 秒内最多一条（防定时器异常/手动连点造成刷屏）
+    if (Date.now() - keepAliveLastSentAt < 10 * 1000) return false;
     const cfg = await getKookConfig();
     if (!cfg.token || !cfg.keepAliveChannelId) return false;
     if (keepAliveLastMsgId) {
@@ -78,6 +82,7 @@ async function sendKeepAlive() {
     }
     const msgId = await sendMessage(cfg.token, cfg.keepAliveChannelId, 1, `🟢 机器人在线（${cnNow()}）`);
     keepAliveLastMsgId = msgId;
+    keepAliveLastSentAt = Date.now();
     console.log('[kook] 保活消息已发送，机器人在线');
     return !!msgId;
   } catch (e) {
@@ -107,22 +112,27 @@ function cnNow() {
  * 会话通过 resume 机制无缝恢复（丢失消息自动补发）。
  */
 function scheduleReconnectKeepAlive() {
+  clearInterval(reconnectKeepAliveTimer); // 幂等：重复调用不叠加定时器
   const hours = Number(process.env.KOOK_RECONNECT_HOURS || 12);
   if (!(hours > 0)) {
     console.log('[kook] 定时重连已禁用（KOOK_RECONNECT_HOURS=0）');
     return;
   }
   const intervalMs = hours * 3600 * 1000;
-  setInterval(async () => {
+  reconnectKeepAliveTimer = setInterval(async () => {
     console.log(`[kook] 保活重连（已运行约 ${hours} 小时，强制重建会话）`);
     await reconnectNow();
   }, intervalMs);
 }
 
-/** 立即重连（保活定时器与后台「重新连接」按钮共用） */
+/**
+ * 立即重连：只重建 WS 连接本身。
+ * 注意：不调用 start()（facade 的 start 含定时器注册与入口卡发送等初始化副作用，
+ * 重复调用会导致定时器指数叠加、频道被刷屏——曾因此出现过"机器人发疯"）。
+ */
 async function reconnectNow() {
   client.stop();
-  await start();
+  await client.start();
 }
 
 /** 优雅停止（进程退出时） */
