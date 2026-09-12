@@ -299,11 +299,10 @@ async function doNotifyOrderEvent(transition, data) {
         break;
       }
       case 'ACCEPTED': {
-        // 更新大厅卡片 → 「已被接单」（抢单按钮消失）
+        // 更新大厅卡片 → 「已被接单」（蓝色；保留 msg_id 记录，结单时还要用）
         const hall = sentHallCards.get(order.id);
         if (hall) {
           await updateMessage(cfg.token, hall.msgId, JSON.stringify([cards.hallTakenCard(order, runName)]));
-          sentHallCards.delete(order.id);
         }
         await dmCard(cfg.token, runner, cards.runnerAcceptedCard(order, pubName));
         await dmCard(cfg.token, publisher, cards.employerAcceptedCard(order, runner));
@@ -323,12 +322,30 @@ async function doNotifyOrderEvent(transition, data) {
           await updateMessage(cfg.token, deliveredMsgId, JSON.stringify([cards.employerConfirmedCard(order)]));
           sentDeliveredCards.delete(order.id);
         }
+        // 大厅卡片 → 「✅ 已结单」（绿色）
+        const hallDone = sentHallCards.get(order.id);
+        if (hallDone) {
+          await updateMessage(cfg.token, hallDone.msgId, JSON.stringify([cards.hallCompletedCard(order, runName)]));
+          sentHallCards.delete(order.id);
+        }
         await dmText(cfg.token, publisher, '✅ 已确认收到，本单完成，感谢使用！');
         await dmCard(cfg.token, runner, cards.runnerConfirmedCard(order));
         break;
       }
       case 'CANCELED': {
         const cancel = cards.cancelCard(order, '');
+        // 待核对卡片若仍在 → 更新为「已取消」（去掉确认/删除按钮）
+        const chk = sentCheckCards.get(order.id);
+        if (chk) {
+          await updateMessage(cfg.token, chk.msgId, JSON.stringify([cards.cancelCard(order, '该订单已取消，无需再核对。')]));
+          sentCheckCards.delete(order.id);
+        }
+        // 大厅卡片若仍在 → 更新为「已取消」
+        const hallCancel = sentHallCards.get(order.id);
+        if (hallCancel) {
+          await updateMessage(cfg.token, hallCancel.msgId, JSON.stringify([cards.cancelCard(order, '该订单已被取消。')]));
+          sentHallCards.delete(order.id);
+        }
         await dmCard(cfg.token, publisher, cancel);
         await dmCard(cfg.token, runner, cancel);
         break;

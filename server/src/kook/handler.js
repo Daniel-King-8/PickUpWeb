@@ -14,7 +14,7 @@
  */
 const { User, Order, Setting } = require('../models');
 const { getKookConfig } = require('./config');
-const { sendDirectMessage, uploadLocalAsset } = require('./api');
+const { sendDirectMessage, updateMessage, uploadLocalAsset } = require('./api');
 const cards = require('./cards');
 const { decodeBtn } = cards;
 const { calcFee, generateOrderNo, normalizeFeeRules, generateUid } = require('../utils/helpers');
@@ -607,6 +607,22 @@ async function handleButton(token, clicker, buttons) {
     }
     if (!res || !res.ok) {
       await dm(token, clicker, FAIL_TEXT[res.code] || '操作失败，请去网页处理');
+      // 兜底：待核对操作失败（订单已被取消/删除/处理过）时，直接用点击消息的 msg_id
+      // 把过期卡片更新到最新状态（不依赖内存索引，跨进程重启也有效）
+      if (btn.msg_id && (act === 'mark-paid' || act === 'delete-order')) {
+        try {
+          const cur = await Order.findByPk(id);
+          if (!cur) {
+            await updateMessage(token, btn.msg_id, JSON.stringify([cards.adminDeletedCard('（记录已不存在）')]));
+          } else if (cur.status === 'CANCELED') {
+            await updateMessage(token, btn.msg_id, JSON.stringify([cards.cancelCard(cur, '该订单已取消，无需再核对。')]));
+          } else if (cur.status !== 'PAYING') {
+            await updateMessage(token, btn.msg_id, JSON.stringify([cards.adminConfirmedCard(cur)]));
+          }
+        } catch (e) {
+          /* 卡片更新失败忽略（订单状态本身正确） */
+        }
+      }
     }
     // 成功时由 orderService 通知矩阵负责各端通知，无需额外回执
   }

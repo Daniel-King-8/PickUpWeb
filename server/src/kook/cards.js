@@ -93,7 +93,7 @@ const hallCard = (order, employerName) => {
   if (order.remark) lines.push(`备注：${order.remark}`);
   return {
     type: 'card',
-    theme: 'success',
+    theme: 'danger', // 固定红色：新悬赏待接单
     modules: [
       header(`💰 新悬赏待接单 · ¥${Number(order.reward).toFixed(2)}`),
       { type: 'section', text: { type: 'plain-text', content: lines.join('\n') } },
@@ -101,6 +101,27 @@ const hallCard = (order, employerName) => {
     ],
   };
 };
+
+/** 大厅卡：已结单（雇主确认后更新，固定绿色） */
+const hallCompletedCard = (order, runnerName) => ({
+  type: 'card',
+  theme: 'success', // 固定绿色：已结单
+  modules: [
+    header(`✅ 已结单 · ¥${Number(order.reward).toFixed(2)}`),
+    {
+      type: 'section',
+      text: {
+        type: 'plain-text',
+        content: [
+          `订单号：${order.orderNo}`,
+          `${order.station} → ${order.deliverPlace}`,
+          `跑腿员：${runnerName}`,
+          '雇主已确认收货，本单完成。',
+        ].join('\n'),
+      },
+    },
+  ],
+});
 
 /** 已被接单的大厅卡片（message/update 替换旧卡用：抢单按钮随之消失） */
 const hallTakenCard = (order, runnerName) => {
@@ -416,6 +437,7 @@ module.exports = {
   decodeBtn,
   hallCard,
   hallTakenCard,
+  hallCompletedCard,
   adminCheckCard,
   adminConfirmedCard,
   adminDeletedCard,
