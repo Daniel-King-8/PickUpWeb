@@ -14,3 +14,6 @@ data/
 *.log
 .idea/
 .vscode/
+
+# 博客文章（本地保留，不入库）
+blog.md
